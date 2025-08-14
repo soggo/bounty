@@ -6,6 +6,7 @@ import SignIn from './pages/SignIn.jsx'
 import SignUp from './pages/SignUp.jsx'
 import Account from './pages/Account.jsx'
 import CartDrawer from './components/CartDrawer.jsx'
+import Checkout from './pages/Checkout.jsx'
 import heroPlaceholder from '../january_w1-homepage_desktop_.jpeg'
 
 export default function App() {
@@ -98,6 +99,16 @@ export default function App() {
   if (route.startsWith('#/signin')) return <SignIn />
   if (route.startsWith('#/signup')) return <SignUp />
   if (route.startsWith('#/account')) return <Account />
+  if (route.startsWith('#/checkout')) {
+    return (
+      <Checkout
+        cartItems={cartItems}
+        subtotal={subtotal}
+        isAuthenticated={isAuthenticated}
+        cartCount={cartCount}
+      />
+    )
+  }
   if (route.startsWith('#/p/')) {
     const slug = decodeURIComponent(route.replace(/^#\/p\//, '').split(/[?#]/)[0] || '')
     return (

@@ -77,7 +77,7 @@ export default function CartDrawer({ open, onClose, items, onIncrement, onDecrem
           </div>
           <div className="footer-actions flex items-center justify-between gap-3">
             <button className="link underline" onClick={onClose}>Continue shopping</button>
-            <button className="btn bg-black text-white uppercase tracking-wide px-4 py-3 disabled:opacity-50" disabled={items.length === 0}>Checkout</button>
+            <a href="#/checkout" onClick={onClose} className={`btn bg-black text-white uppercase tracking-wide px-4 py-3 ${items.length === 0 ? 'pointer-events-none opacity-50' : ''}`}>Checkout</a>
           </div>
         </div>
       </aside>

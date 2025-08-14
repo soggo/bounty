@@ -86,6 +86,18 @@ CREATE TABLE IF NOT EXISTS profiles (
 );
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Helper: check if current (or provided) user is admin without triggering RLS recursion
+CREATE OR REPLACE FUNCTION public.is_admin(uid UUID DEFAULT auth.uid())
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles WHERE id = uid AND role = 'admin'
+  );
+$$;
 ```
 
 Policies for `profiles` (users can see/update their own profile; admins can access all):
@@ -95,54 +107,30 @@ Policies for `profiles` (users can see/update their own profile; admins can acce
 CREATE POLICY profiles_select_own_or_admin
   ON profiles FOR SELECT
   USING (
-    id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles AS admin
-      WHERE admin.id = auth.uid() AND admin.role = 'admin'
-    )
+    id = auth.uid() OR public.is_admin(auth.uid())
   );
 
--- Hardened update policies
--- Remove the broad update policy if it exists
+-- Hardened update policies (avoid recursion by using public.is_admin())
 DROP POLICY IF EXISTS profiles_update_own_or_admin ON profiles;
+DROP POLICY IF EXISTS profiles_update_self_keep_role ON profiles;
 
 -- Admins can update any profile (including role)
 CREATE POLICY profiles_update_admin_any
   ON profiles FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
-  );
+  USING (public.is_admin(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()));
 
--- Users can update only their own row, and cannot change their role
-CREATE POLICY profiles_update_self_keep_role
+-- Non-admin users can update only their own row; role must remain 'customer'
+CREATE POLICY profiles_update_self_non_admin
   ON profiles FOR UPDATE
-  USING (
-    id = auth.uid()
-  )
-  WITH CHECK (
-    id = auth.uid()
-    AND role = (
-      SELECT pr.role FROM profiles pr WHERE pr.id = auth.uid()
-    )
-  );
+  USING (id = auth.uid() AND NOT public.is_admin(auth.uid()))
+  WITH CHECK (id = auth.uid() AND role = 'customer');
 
 -- Inserts are normally handled by the signup trigger below.
 -- Allow admins to insert/fix rows when needed.
 CREATE POLICY profiles_insert_admin_only
   ON profiles FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles AS admin
-      WHERE admin.id = auth.uid() AND admin.role = 'admin'
-    )
-  );
+  WITH CHECK (public.is_admin(auth.uid()));
 ```
 
 Automatic profile creation on signup:
@@ -213,43 +201,28 @@ Policies for `user_addresses` (users manage their own; admins full access):
 CREATE POLICY user_addresses_select_own_or_admin
   ON user_addresses FOR SELECT
   USING (
-    user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
+    user_id = auth.uid() OR public.is_admin(auth.uid())
   );
 
 CREATE POLICY user_addresses_insert_own_or_admin
   ON user_addresses FOR INSERT
   WITH CHECK (
-    user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
+    user_id = auth.uid() OR public.is_admin(auth.uid())
   );
 
 CREATE POLICY user_addresses_update_own_or_admin
   ON user_addresses FOR UPDATE
   USING (
-    user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
+    user_id = auth.uid() OR public.is_admin(auth.uid())
   )
   WITH CHECK (
-    user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
+    user_id = auth.uid() OR public.is_admin(auth.uid())
   );
 
 CREATE POLICY user_addresses_delete_own_or_admin
   ON user_addresses FOR DELETE
   USING (
-    user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
+    user_id = auth.uid() OR public.is_admin(auth.uid())
   );
 ```
 
@@ -294,37 +267,25 @@ Policies for `orders` (users can read their own; admin full access; inserts allo
 CREATE POLICY orders_select_own_or_admin
   ON orders FOR SELECT
   USING (
-    user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
+    user_id = auth.uid() OR public.is_admin(auth.uid())
   );
 
 CREATE POLICY orders_insert_own_or_admin
   ON orders FOR INSERT
   WITH CHECK (
-    user_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
+    user_id = auth.uid() OR public.is_admin(auth.uid())
   );
 
 -- Typically, updates are done by server-side code/webhooks using the service role.
 -- Allow only admins to update/delete in client context.
 CREATE POLICY orders_update_admin_only
   ON orders FOR UPDATE
-  USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
-  )
-  WITH CHECK (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
-  );
+  USING (public.is_admin(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()));
 
 CREATE POLICY orders_delete_admin_only
   ON orders FOR DELETE
-  USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
-  );
+  USING (public.is_admin(auth.uid()));
 ```
 
 ### order_items
@@ -361,9 +322,7 @@ CREATE POLICY order_items_select_via_orders
     EXISTS (
       SELECT 1 FROM orders o
       WHERE o.id = order_items.order_id AND (
-        o.user_id = auth.uid() OR EXISTS (
-          SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-        )
+        o.user_id = auth.uid() OR public.is_admin(auth.uid())
       )
     )
   );
@@ -375,9 +334,7 @@ CREATE POLICY order_items_insert_via_orders
     EXISTS (
       SELECT 1 FROM orders o
       WHERE o.id = order_items.order_id AND (
-        o.user_id = auth.uid() OR EXISTS (
-          SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-        )
+        o.user_id = auth.uid() OR public.is_admin(auth.uid())
       )
     )
   );
@@ -385,18 +342,12 @@ CREATE POLICY order_items_insert_via_orders
 -- Updates/deletes limited to admin in client context
 CREATE POLICY order_items_update_admin_only
   ON order_items FOR UPDATE
-  USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
-  )
-  WITH CHECK (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
-  );
+  USING (public.is_admin(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()));
 
 CREATE POLICY order_items_delete_admin_only
   ON order_items FOR DELETE
-  USING (
-    EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
-  );
+  USING (public.is_admin(auth.uid()));
 ```
 
 ## Notes
@@ -421,24 +372,18 @@ ALTER TABLE user_wishlist_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY user_wishlist_select_own_or_admin
   ON user_wishlist_items FOR SELECT
   USING (
-    user_id = auth.uid() OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
+    user_id = auth.uid() OR public.is_admin(auth.uid())
   );
 
 CREATE POLICY user_wishlist_insert_own_or_admin
   ON user_wishlist_items FOR INSERT
   WITH CHECK (
-    user_id = auth.uid() OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
+    user_id = auth.uid() OR public.is_admin(auth.uid())
   );
 
 CREATE POLICY user_wishlist_delete_own_or_admin
   ON user_wishlist_items FOR DELETE
   USING (
-    user_id = auth.uid() OR EXISTS (
-      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
+    user_id = auth.uid() OR public.is_admin(auth.uid())
   );
 ```
