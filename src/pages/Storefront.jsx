@@ -1,9 +1,10 @@
 import '../App.css'
 import heroPlaceholder from '../../january_w1-homepage_desktop_.jpeg'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header.jsx'
-import CartDrawer from '../components/CartDrawer.jsx'
 import SearchOverlay from '../components/SearchOverlay.jsx'
+import ProductCard from '../components/ProductCard.jsx'
+import { supabase } from '../lib/supabaseClient'
 
 function Hero({ onShop }) {
   return (
@@ -35,134 +36,119 @@ function Section({ title, children, id, titleClassName }) {
   )
 }
 
-function ProductCard({ name, onAdd }) {
-  return (
-    <div className="product-card flex flex-col gap-3">
-      <div className="group relative bg-gray-100 h-[420px] md:h-[500px] lg:h-[560px] overflow-hidden">
-        <img src={heroPlaceholder} alt={name} className="absolute inset-0 w-full h-full object-cover" style={{ minHeight: '100%', minWidth: '100%' }} />
-        <div className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-        <div className="absolute inset-0 flex items-end justify-center p-4 opacity-0 group-hover:opacity-100 transition">
-          <button
-            className="pointer-events-auto bg-black text-white text-xs px-4 py-2 rounded-full shadow hover:bg-white hover:text-black hover:outline-1 hover:outline-black"
-            onClick={onAdd}
-          >
-            Add to cart
-          </button>
-        </div>
-      </div>
-      <div className="product-name text-sm">{name}</div>
-    </div>
-  )
+function getPrimaryImageUrl(product) {
+  const images = Array.isArray(product?.images) ? product.images : []
+  const first = images.find(img => img && (img.url || typeof img === 'string'))
+  if (!first) return heroPlaceholder
+  return typeof first === 'string' ? first : (first.url || heroPlaceholder)
 }
 
-function BestSellerCard({ name, subtitle, price, label, onAdd }) {
-  return (
-    <div className="flex flex-col">
-      <div className="group relative bg-gray-100 h-[420px] md:h-[500px] lg:h-[560px] overflow-hidden">
-        <img src={heroPlaceholder} alt={name} className="absolute inset-0 w-full h-full object-cover" style={{ minHeight: '100%', minWidth: '100%' }} />
-        {label ? (
-          <div className="absolute top-4 right-4 text-[10px] uppercase tracking-[.14em] bg-white/90 px-2 py-1 rounded-full z-10">{label}</div>
-        ) : null}
-        <div className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-        <div className="absolute inset-0 flex items-end justify-center p-4 opacity-0 group-hover:opacity-100 transition">
-          <button
-            className="pointer-events-auto bg-black text-white text-xs px-4 py-2 rounded-full shadow hover:bg-white hover:text-black hover:outline-1 hover:outline-black"
-            onClick={onAdd}
-          >
-            Add to cart
-          </button>
-        </div>
-      </div>
-      <div className="mt-3">
-        <div className="text-base md:text-lg font-medium">{name}</div>
-        {(subtitle || price) ? (
-          <div className="text-gray-600 text-sm">{subtitle}{subtitle && price ? ' — ' : ''}{price}</div>
-        ) : null}
-      </div>
-    </div>
-  )
-}
+// StickyDiagnostic removed per request
 
-function StickyDiagnostic() {
-  return (
-    <div className="sticky-diagnostic">
-      <div>Find your next favorite piece at Bounty</div>
-      <button className="btn">Browse collections</button>
-    </div>
-  )
-}
-
-export default function Storefront() {
-  const [isCartOpen, setCartOpen] = useState(false)
+export default function Storefront({
+  cartItems = [],
+  onAddToCart,
+  onIncrement,
+  onDecrement,
+  onRemove,
+  subtotal = 0,
+  isCartOpen = false,
+  onOpenCart,
+  onCloseCart,
+  cartCount = 0,
+}) {
   const [isSearchOpen, setSearchOpen] = useState(false)
-  const [cartItems, setCartItems] = useState([])
+  const [products, setProducts] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
-  const subtotal = useMemo(() => cartItems.reduce((sum, i) => sum + i.price * i.qty, 0), [cartItems])
+  useEffect(() => {
+    let mounted = true
+    async function fetchProducts() {
+      setLoading(true)
+      setLoadError('')
+      const { data, error } = await supabase
+        .from('products')
+        .select('id,slug,name,subtitle,price,old_price,is_sale,is_bestseller,is_new,product_type,tags,images,created_at,stock_quantity')
+        .order('created_at', { ascending: false })
+      if (!mounted) return
+      setLoading(false)
+      if (error) {
+        setLoadError(error.message)
+        setProducts([])
+        return
+      }
+      setProducts(Array.isArray(data) ? data : [])
+    }
+    fetchProducts()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
-  function addToCart(name) {
-    setCartItems((prev) => {
-      const id = name
-      const existing = prev.find((i) => i.id === id)
-      if (existing) return prev.map((i) => i.id === id ? { ...i, qty: i.qty + 1 } : i)
-      return [...prev, { id, name, price: 12999, qty: 1, image: heroPlaceholder }]
-    })
-    setCartOpen(true)
-  }
-
-  function inc(id) { setCartItems((prev) => prev.map((i) => i.id === id ? { ...i, qty: i.qty + 1 } : i)) }
-  function dec(id) { setCartItems((prev) => prev.map((i) => i.id === id ? { ...i, qty: Math.max(1, i.qty - 1) } : i)) }
-  function remove(id) { setCartItems((prev) => prev.filter((i) => i.id !== id)) }
+  const bestSellers = useMemo(() => products.filter(p => p.is_bestseller).slice(0, 3), [products])
+  const summerSelection = useMemo(() => {
+    const source = products.filter(p => p.is_new)
+    return (source.length ? source : products.filter(p => !p.is_bestseller)).slice(0, 3)
+  }, [products])
+  const giftsSouvenirs = useMemo(() => {
+    const byTag = products.filter(p => Array.isArray(p.tags) && p.tags.some(t => /gift|souvenir/i.test(String(t))))
+    return (byTag.length ? byTag : products).slice(0, 3)
+  }, [products])
+  const bundlesKits = useMemo(() => {
+    const byType = products.filter(p => p.product_type === 'bundle' || p.product_type === 'kit')
+    return (byType.length ? byType : products).slice(0, 3)
+  }, [products])
   return (
     <div className="page">
-      <Header onOpenCart={() => setCartOpen(true)} onOpenSearch={() => setSearchOpen(true)} />
+      <Header onOpenCart={onOpenCart} onOpenSearch={() => setSearchOpen(true)} cartCount={cartCount} />
       <Hero onShop={() => setSearchOpen(true)} />
 
       <Section title="Best Sellers" id="best-sellers" titleClassName="text-[clamp(48px,9vw,120px)]">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
-          <BestSellerCard
-            label="New"
-            name="Home supplies item 01"
-            subtitle="Household essential"
-            price="from $29.99"
-            onAdd={() => addToCart('Home supplies item 01')}
-          />
-          <BestSellerCard
-            label="Bestseller"
-            name="Home supplies item 02"
-            price="$39.99"
-            onAdd={() => addToCart('Home supplies item 02')}
-          />
-          <BestSellerCard
-            label="Bestseller"
-            name="Home supplies item 03"
-            subtitle="Durable and reliable"
-            price="from $29.50"
-            onAdd={() => addToCart('Home supplies item 03')}
-          />
+          {loading && bestSellers.length === 0 ? (
+            <div className="text-sm text-gray-600">Loading…</div>
+          ) : bestSellers.length === 0 ? (
+            <div className="text-sm text-gray-600">No bestsellers yet</div>
+          ) : bestSellers.map(p => (
+            <ProductCard key={p.id} product={p} onAdd={() => onAddToCart?.(p)} />
+          ))}
         </div>
       </Section>
 
       <Section title="Summer selection" id="summer">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
-          <ProductCard name="Cooling Glass Carafe" onAdd={() => addToCart('Cooling Glass Carafe')} />
-          <ProductCard name="Beach Tote" onAdd={() => addToCart('Beach Tote')} />
-          <ProductCard name="After-sun Aloe Lotion" onAdd={() => addToCart('After-sun Aloe Lotion')} />
+          {loading && summerSelection.length === 0 ? (
+            <div className="text-sm text-gray-600">Loading…</div>
+          ) : summerSelection.length === 0 ? (
+            <div className="text-sm text-gray-600">No products yet</div>
+          ) : summerSelection.map(p => (
+            <ProductCard key={p.id} product={p} onAdd={() => onAddToCart?.(p)} />
+          ))}
         </div>
       </Section>
 
       <Section title="Gifts & souvenirs" id="gifts">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
-          <ProductCard name="City Landmark Miniature" onAdd={() => addToCart('City Landmark Miniature')} />
-          <ProductCard name="Pressed Flower Frame" onAdd={() => addToCart('Pressed Flower Frame')} />
-          <ProductCard name="Artisan Notebook" onAdd={() => addToCart('Artisan Notebook')} />
+          {loading && giftsSouvenirs.length === 0 ? (
+            <div className="text-sm text-gray-600">Loading…</div>
+          ) : giftsSouvenirs.length === 0 ? (
+            <div className="text-sm text-gray-600">No products yet</div>
+          ) : giftsSouvenirs.map(p => (
+            <ProductCard key={p.id} product={p} onAdd={() => onAddToCart?.(p)} />
+          ))}
         </div>
       </Section>
 
       <Section title="Bundles & kits" id="bundles">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
-          <ProductCard name="Morning Coffee Set" onAdd={() => addToCart('Morning Coffee Set')} />
-          <ProductCard name="Relax & Unwind Duo" onAdd={() => addToCart('Relax & Unwind Duo')} />
-          <ProductCard name="Housewarming Essentials Kit" onAdd={() => addToCart('Housewarming Essentials Kit')} />
+          {loading && bundlesKits.length === 0 ? (
+            <div className="text-sm text-gray-600">Loading…</div>
+          ) : bundlesKits.length === 0 ? (
+            <div className="text-sm text-gray-600">No bundles or kits yet</div>
+          ) : bundlesKits.map(p => (
+            <ProductCard key={p.id} product={p} onAdd={() => onAddToCart?.(p)} />
+          ))}
         </div>
       </Section>
 
@@ -171,18 +157,7 @@ export default function Storefront() {
           <p>Bounty: We curate the essential and the delightful for your home and the people you love.</p>
         </div>
       </footer>
-
-      <StickyDiagnostic />
-
-      <CartDrawer
-        open={isCartOpen}
-        onClose={() => setCartOpen(false)}
-        items={cartItems}
-        onIncrement={inc}
-        onDecrement={dec}
-        onRemove={remove}
-        subtotal={subtotal}
-      />
+      {/* Sticky diagnostic removed */}
 
       <SearchOverlay
         open={isSearchOpen}

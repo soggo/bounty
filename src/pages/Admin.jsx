@@ -51,6 +51,7 @@ export default function Admin() {
   const [productStats, setProductStats] = useState({ total: 0, sale: 0, bestseller: 0, isNew: 0 })
   const [recentProducts, setRecentProducts] = useState([])
   const [loadingProducts, setLoadingProducts] = useState(false)
+  const [editingProductId, setEditingProductId] = useState(null)
 
   async function refreshProductStats() {
     setLoadingProducts(true)
@@ -72,7 +73,7 @@ export default function Admin() {
     // Recent products
     const { data: recent, error: recentErr } = await supabase
       .from('products')
-      .select('id,name,price,old_price,is_sale,is_bestseller,is_new,created_at')
+      .select('id,name,price,old_price,is_sale,is_bestseller,is_new,created_at,stock_quantity')
       .order('created_at', { ascending: false })
       .limit(8)
 
@@ -87,6 +88,15 @@ export default function Admin() {
   function formatCents(cents) {
     if (cents === null || cents === undefined) return ''
     return (cents / 100).toLocaleString(undefined, { style: 'currency', currency: 'USD' })
+  }
+
+  function centsToInputString(cents) {
+    if (cents === null || cents === undefined) return ''
+    try {
+      return (Number(cents) / 100).toFixed(2)
+    } catch {
+      return ''
+    }
   }
 
   async function testConnection() {
@@ -205,6 +215,108 @@ export default function Admin() {
     })
   }
 
+  async function startEditProduct(id) {
+    setStatusMessage('Loading product…')
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', id)
+      .single()
+    if (error) {
+      setStatusMessage(`Failed to load product: ${error.message}`)
+      return
+    }
+    const p = data || {}
+    setProductForm({
+      name: p.name || '',
+      subtitle: p.subtitle || '',
+      description: p.description || '',
+      price: centsToInputString(p.price),
+      old_price: centsToInputString(p.old_price),
+      is_sale: !!p.is_sale,
+      is_bestseller: !!p.is_bestseller,
+      is_new: !!p.is_new,
+      category_id: p.category_id || '',
+      product_type: p.product_type || 'individual',
+      stock_quantity: Number.isFinite(Number(p.stock_quantity)) ? Number(p.stock_quantity) : 0,
+      tags: Array.isArray(p.tags) ? p.tags.join(', ') : '',
+      images: Array.isArray(p.images) ? p.images : []
+    })
+    setEditingProductId(p.id)
+    setActiveTab('editProduct')
+    setStatusMessage('')
+  }
+
+  async function handleUpdateProduct(e) {
+    e.preventDefault()
+    if (!editingProductId) {
+      setStatusMessage('Nothing to update')
+      return
+    }
+    setStatusMessage('Updating product…')
+
+    const priceCents = centsFromInput(productForm.price)
+    const oldPriceCents = centsFromInput(productForm.old_price)
+
+    const tagsList = (productForm.tags || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+    const imagesArray = Array.isArray(productForm.images)
+      ? productForm.images
+      : String(productForm.images || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
+          .map(url => ({ url }))
+
+    const payload = {
+      name: productForm.name.trim(),
+      slug: slugify(productForm.name),
+      subtitle: productForm.subtitle || null,
+      description: productForm.description || null,
+      price: priceCents,
+      old_price: oldPriceCents,
+      is_sale: !!productForm.is_sale,
+      is_bestseller: !!productForm.is_bestseller,
+      is_new: !!productForm.is_new,
+      category_id: productForm.category_id || null,
+      product_type: productForm.product_type || null,
+      stock_quantity: Number.isFinite(Number(productForm.stock_quantity)) ? Number(productForm.stock_quantity) : 0,
+      tags: tagsList.length ? tagsList : null,
+      images: imagesArray.length ? imagesArray : null
+    }
+
+    if (!payload.name) {
+      setStatusMessage('Product name is required')
+      return
+    }
+    if (!Number.isFinite(priceCents)) {
+      setStatusMessage('Valid price is required')
+      return
+    }
+
+    const { error } = await supabase
+      .from('products')
+      .update(payload)
+      .eq('id', editingProductId)
+
+    if (error) {
+      setStatusMessage(`Update failed: ${error.message}`)
+      return
+    }
+
+    setStatusMessage('Product updated')
+    setEditingProductId(null)
+    setActiveTab('overview')
+    refreshProductStats()
+    setProductForm({
+      name: '', subtitle: '', description: '', price: '', old_price: '', is_sale: false,
+      is_bestseller: false, is_new: false, category_id: '', product_type: 'individual', stock_quantity: 0,
+      tags: '', images: []
+    })
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container max-w-[1200px] mx-auto p-6">
@@ -237,6 +349,12 @@ export default function Admin() {
               className={`px-3 py-2 text-sm border-b-2 transition-colors duration-200 ${activeTab === 'createProduct' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black hover:border-black/50'}`}
               onClick={() => setActiveTab('createProduct')}
             >Create Product</button>
+            {activeTab === 'editProduct' ? (
+              <button
+                className={`px-3 py-2 text-sm border-b-2 transition-colors duration-200 ${activeTab === 'editProduct' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black hover:border-black/50'}`}
+                onClick={() => setActiveTab('editProduct')}
+              >Edit Product</button>
+            ) : null}
           </nav>
         </div>
 
@@ -286,12 +404,18 @@ export default function Admin() {
                         {p.is_sale && p.old_price ? (
                           <span className="line-through text-gray-400">{formatCents(p.old_price)}</span>
                         ) : null}
+                        <span className="text-gray-400">•</span>
+                        <span title="Available quantity">Qty: {Number.isFinite(Number(p.stock_quantity)) ? Number(p.stock_quantity) : 0}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
                       {p.is_bestseller ? <span className="px-2 py-0.5 rounded-full bg-gray-100">Bestseller</span> : null}
                       {p.is_new ? <span className="px-2 py-0.5 rounded-full bg-gray-100">New</span> : null}
                       {p.is_sale ? <span className="px-2 py-0.5 rounded-full bg-gray-100">Sale</span> : null}
+                      <button
+                        className="ml-2 px-2 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black"
+                        onClick={() => startEditProduct(p.id)}
+                      >Edit</button>
                     </div>
                   </div>
                 ))}
@@ -423,6 +547,106 @@ export default function Admin() {
 
             <div className="mt-4">
               <button className="bg-black text-white px-4 py-2 rounded hover:bg-white hover:text-black hover:outline-1 hover:outline-black" type="submit">Create Product</button>
+            </div>
+          </form>
+        )}
+
+        {activeTab === 'editProduct' && (
+          <form className="bg-white rounded border p-4" onSubmit={handleUpdateProduct}>
+            <h2 className="text-lg font-medium mb-4">Edit Product</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm mb-1">Name</label>
+                <input className="w-full border rounded px-3 py-2" value={productForm.name} onChange={(e) => updateProductField('name', e.target.value)} required />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Product type</label>
+                <select className="w-full border rounded px-3 py-2" value={productForm.product_type} onChange={(e) => updateProductField('product_type', e.target.value)}>
+                  <option value="individual">Individual</option>
+                  <option value="bundle">Bundle</option>
+                  <option value="kit">Kit</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">Subtitle</label>
+                <input className="w-full border rounded px-3 py-2" value={productForm.subtitle} onChange={(e) => updateProductField('subtitle', e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Category</label>
+                <select className="w-full border rounded px-3 py-2" value={productForm.category_id} onChange={(e) => updateProductField('category_id', e.target.value)}>
+                  <option value="">None</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">Price (e.g., 29.99)</label>
+                <input className="w-full border rounded px-3 py-2" inputMode="decimal" value={productForm.price} onChange={(e) => updateProductField('price', e.target.value)} required />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Old price (former price)</label>
+                <input className="w-full border rounded px-3 py-2" inputMode="decimal" value={productForm.old_price} onChange={(e) => updateProductField('old_price', e.target.value)} />
+              </div>
+
+              <div>
+                <label className="block text-sm mb-1">Stock quantity</label>
+                <input className="w-full border rounded px-3 py-2" type="number" value={productForm.stock_quantity} onChange={(e) => updateProductField('stock_quantity', e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Tags (comma separated)</label>
+                <input className="w-full border rounded px-3 py-2" value={productForm.tags} onChange={(e) => updateProductField('tags', e.target.value)} />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm mb-1">Images</label>
+                <ImageUploader
+                  value={Array.isArray(productForm.images) ? productForm.images : []}
+                  onChange={(imgs) => updateProductField('images', imgs)}
+                  signerUrl={import.meta.env.VITE_CLOUDINARY_SIGNER_URL || '/.netlify/functions/sign-cloudinary'}
+                  cloudName={import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm mb-1">Description</label>
+                <textarea className="w-full border rounded px-3 py-2" rows="4" value={productForm.description} onChange={(e) => updateProductField('description', e.target.value)} />
+              </div>
+
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={productForm.is_sale} onChange={(e) => updateProductField('is_sale', e.target.checked)} />
+                  <span>On sale</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={productForm.is_bestseller} onChange={(e) => updateProductField('is_bestseller', e.target.checked)} />
+                  <span>Bestseller</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={productForm.is_new} onChange={(e) => updateProductField('is_new', e.target.checked)} />
+                  <span>New</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-3">
+              <button className="bg-black text-white px-4 py-2 rounded hover:bg-white hover:text-black hover:outline-1 hover:outline-black" type="submit">Update Product</button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded border hover:bg-gray-50"
+                onClick={() => {
+                  setEditingProductId(null)
+                  setActiveTab('overview')
+                  setProductForm({
+                    name: '', subtitle: '', description: '', price: '', old_price: '', is_sale: false,
+                    is_bestseller: false, is_new: false, category_id: '', product_type: 'individual', stock_quantity: 0,
+                    tags: '', images: []
+                  })
+                }}
+              >Cancel</button>
             </div>
           </form>
         )}

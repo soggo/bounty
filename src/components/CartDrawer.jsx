@@ -23,10 +23,47 @@ export default function CartDrawer({ open, onClose, items, onIncrement, onDecrem
                   <div className="cart-title text-sm">{item.name}</div>
                   <div className="cart-price text-sm text-gray-700">{formatNaira(item.price)}</div>
                   <div className="qty-row flex items-center gap-2">
-                    <button className="qty-btn bg-gray-100 border border-gray-200 px-2" onClick={() => onDecrement(item.id)} aria-label={`Decrease ${item.name}`}>−</button>
-                    <span className="qty-val min-w-[20px] text-center" aria-live="polite">{item.qty}</span>
-                    <button className="qty-btn bg-gray-100 border border-gray-200 px-2" onClick={() => onIncrement(item.id)} aria-label={`Increase ${item.name}`}>+</button>
-                    <button className="link underline text-red-700" onClick={() => onRemove(item.id)}>Remove</button>
+                    <button
+                      className="w-8 h-8 inline-flex items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50 active:scale-95 transition disabled:opacity-40"
+                      onClick={() => onDecrement(item.id)}
+                      aria-label={`Decrease ${item.name}`}
+                      title="Decrease quantity"
+                      disabled={item.qty <= 1}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                    </button>
+                    <span className="qty-val min-w-[24px] text-center text-sm" aria-live="polite">{item.qty}</span>
+                    <button
+                      className="w-8 h-8 inline-flex items-center justify-center rounded-full border border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50 active:scale-95 transition disabled:opacity-40"
+                      onClick={() => onIncrement(item.id)}
+                      aria-label={`Increase ${item.name}`}
+                      title="Increase quantity"
+                      disabled={Number.isFinite(Number(item.maxQty)) && item.qty >= Number(item.maxQty)}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                    </button>
+                    {Number.isFinite(Number(item.maxQty)) ? (
+                      <span className="ml-1 text-xs text-gray-500">/ {item.maxQty}</span>
+                    ) : null}
+                    <button
+                      className="ml-1 w-8 h-8 inline-flex items-center justify-center rounded-full hover:bg-gray-100 text-red-700"
+                      onClick={() => onRemove(item.id)}
+                      aria-label={`Remove ${item.name}`}
+                      title="Remove"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6" />
+                        <path d="M14 11v6" />
+                        <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>

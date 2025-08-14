@@ -31,12 +31,16 @@
   gap: 12px;
   padding: 12px 24px;
 }
-.nav-left, .nav-right {
+.nav-right {
   display: flex;
   align-items: center;
   gap: 20px;
 }
 .nav-left { justify-self: start; }
+.nav-left { /* display handled by Tailwind; keep layout only on md+ */ }
+@media (min-width: 768px) {
+  .nav-left { display: flex; align-items: center; gap: 20px; }
+}
 .nav-right { justify-self: end; justify-content: flex-end; }
 .nav-left a, .nav-right a, .nav-right button {
   font-size: 14px;
