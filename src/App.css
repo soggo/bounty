@@ -143,7 +143,6 @@
   margin-bottom: 28px;
 }
 .section-title {
-  font-size: clamp(24px, 4vw, 40px);
   letter-spacing: .02em;
   text-transform: uppercase;
   margin-bottom: 28px;

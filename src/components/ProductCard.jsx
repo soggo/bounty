@@ -15,7 +15,7 @@ function getPrimaryImageUrl(product) {
   return typeof first === 'string' ? first : (first.url || heroPlaceholder)
 }
 
-export default function ProductCard({ product, onAdd }) {
+export default function ProductCard({ product, onAdd, className = '', imageHeightClassName = '' }) {
   const imageUrl = getPrimaryImageUrl(product)
   const isSale = !!product?.is_sale && Number.isFinite(product?.old_price)
   const priceMajor = Number(product?.price || 0) / 100
@@ -29,9 +29,11 @@ export default function ProductCard({ product, onAdd }) {
     ? 'Sale'
     : null
 
+  const imageHeightClasses = imageHeightClassName || 'h-[420px] md:h-[500px] lg:h-[560px]'
+
   return (
-    <a className="product-card flex flex-col gap-3" href={`#/p/${encodeURIComponent(product?.slug || '')}`}>
-      <div className="group relative bg-gray-100 h-[420px] md:h-[500px] lg:h-[560px] overflow-hidden">
+    <a className={`product-card flex flex-col gap-3 ${className}`} href={`#/p/${encodeURIComponent(product?.slug || '')}`}>
+      <div className={`group relative bg-gray-100 ${imageHeightClasses} overflow-hidden`}>
         <img src={imageUrl} alt={product?.name} className="absolute inset-0 w-full h-full object-cover" style={{ minHeight: '100%', minWidth: '100%' }} />
         {label ? (
           <div className="absolute top-4 right-4 text-[10px] uppercase tracking-[.14em] bg-white/90 px-2 py-1 rounded-full z-10">{label}</div>

@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
 
 export default function Header({ onOpenCart, onOpenSearch, cartCount = 0, isAuthenticated = false }) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [categories, setCategories] = useState([])
+  const [productsByCategory, setProductsByCategory] = useState({})
+  const [menuLoading, setMenuLoading] = useState(false)
 
   function openSearch(e) {
     e?.preventDefault()
@@ -24,6 +28,38 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0, isAuth
     setMobileOpen(false)
   }
 
+  useEffect(() => {
+    let mounted = true
+    async function fetchMenuData() {
+      try {
+        setMenuLoading(true)
+        const [catsRes, prodsRes] = await Promise.all([
+          supabase.from('product_categories').select('id,name,slug').order('name', { ascending: true }),
+          supabase.from('products').select('id,slug,name,category_id,images,created_at').order('created_at', { ascending: false })
+        ])
+        if (!mounted) return
+        const cats = Array.isArray(catsRes.data) ? catsRes.data : []
+        const prods = Array.isArray(prodsRes.data) ? prodsRes.data : []
+        const grouped = {}
+        for (const c of cats) grouped[c.id] = []
+        for (const p of prods) {
+          if (p.category_id && grouped[p.category_id]) grouped[p.category_id].push(p)
+        }
+        // limit items per category to 3
+        for (const key of Object.keys(grouped)) grouped[key] = grouped[key].slice(0, 3)
+        setCategories(cats)
+        setProductsByCategory(grouped)
+      } catch (_) {
+        setCategories([])
+        setProductsByCategory({})
+      } finally {
+        if (mounted) setMenuLoading(false)
+      }
+    }
+    fetchMenuData()
+    return () => { mounted = false }
+  }, [])
+
   return (
     <header className="nav sticky top-0 z-50 bg-white border-b">
       <div className="nav-inner container relative w-full grid grid-cols-3 md:grid-cols-[auto_1fr_auto] items-center gap-2 md:gap-3 py-3 px-4 md:px-6">
@@ -42,7 +78,37 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0, isAuth
           </button>
           <nav className="hidden md:flex items-center gap-5">
             {/* Desktop-only links */}
-            <a className="relative" href="#best-sellers">Shop</a>
+            <div className="relative group">
+              <a className="relative" href="#best-sellers">Shop</a>
+              {/* Mega menu */}
+              <div className="absolute left-0 top-full mt-2 w-[92vw] max-w-[1100px] bg-white border rounded-xl shadow-2xl p-6 opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 transition z-50">
+                {menuLoading ? (
+                  <div className="text-sm text-gray-600">Loading categories…</div>
+                ) : categories.length === 0 ? (
+                  <div className="text-sm text-gray-600">No categories yet</div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 max-h-[70vh] overflow-auto pr-1">
+                    {categories.map((cat) => (
+                      <div key={cat.id} className="min-w-0">
+                        <div className="text-xs tracking-[.14em] uppercase text-gray-500 mb-2">{cat.name}</div>
+                        <ul className="space-y-2">
+                          {(productsByCategory[cat.id] || []).map((p) => (
+                            <li key={p.id}>
+                              <a className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50" href={`#/p/${encodeURIComponent(p?.slug || '')}`}>
+                                <span className="truncate text-sm" title={p?.name}>{p?.name}</span>
+                              </a>
+                            </li>
+                          ))}
+                          {(productsByCategory[cat.id] || []).length === 0 ? (
+                            <li className="text-xs text-gray-400">No items</li>
+                          ) : null}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </nav>
         </div>
 
