@@ -20,8 +20,32 @@ export default function SignIn() {
       if (userId) {
         // Best-effort last_seen update; ignore errors
         await supabase.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', userId)
-      }
 
+        // Fetch role to decide redirect
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', userId)
+          .single()
+
+        // Compute safe returnTo
+        let returnTo = '#/'
+        try {
+          const stored = window.sessionStorage.getItem('bounty:returnTo')
+          if (stored && !stored.startsWith('#/signin') && !stored.startsWith('#/signup')) {
+            returnTo = stored
+          }
+          window.sessionStorage.removeItem('bounty:returnTo')
+        } catch (_) {}
+
+        if (profile?.role === 'admin') {
+          window.location.hash = '#/admin'
+        } else {
+          window.location.hash = returnTo
+        }
+        return
+      }
+      // Fallback
       window.location.hash = '#/'
     } catch (err) {
       setErrorMessage(err?.message || 'Unable to sign in')

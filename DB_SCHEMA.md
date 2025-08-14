@@ -102,21 +102,34 @@ CREATE POLICY profiles_select_own_or_admin
     )
   );
 
--- Update own profile or any profile if admin
-CREATE POLICY profiles_update_own_or_admin
+-- Hardened update policies
+-- Remove the broad update policy if it exists
+DROP POLICY IF EXISTS profiles_update_own_or_admin ON profiles;
+
+-- Admins can update any profile (including role)
+CREATE POLICY profiles_update_admin_any
   ON profiles FOR UPDATE
   USING (
-    id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles AS admin
-      WHERE admin.id = auth.uid() AND admin.role = 'admin'
+    EXISTS (
+      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
     )
   )
   WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
+    )
+  );
+
+-- Users can update only their own row, and cannot change their role
+CREATE POLICY profiles_update_self_keep_role
+  ON profiles FOR UPDATE
+  USING (
     id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM profiles AS admin
-      WHERE admin.id = auth.uid() AND admin.role = 'admin'
+  )
+  WITH CHECK (
+    id = auth.uid()
+    AND role = (
+      SELECT pr.role FROM profiles pr WHERE pr.id = auth.uid()
     )
   );
 

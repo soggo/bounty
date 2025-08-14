@@ -35,7 +35,16 @@ export default function SignUp() {
       if (!data.session) {
         setInfoMessage('Check your inbox to confirm your email.')
       } else {
-        window.location.hash = '#/'
+        // Compute safe returnTo
+        let returnTo = '#/'
+        try {
+          const stored = window.sessionStorage.getItem('bounty:returnTo')
+          if (stored && !stored.startsWith('#/signin') && !stored.startsWith('#/signup')) {
+            returnTo = stored
+          }
+          window.sessionStorage.removeItem('bounty:returnTo')
+        } catch (_) {}
+        window.location.hash = returnTo
       }
     } catch (err) {
       setErrorMessage(err?.message || 'Unable to sign up')

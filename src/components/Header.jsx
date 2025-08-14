@@ -9,6 +9,15 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0 }) {
     setMobileOpen(false)
   }
 
+  function rememberReturnTo() {
+    try {
+      const current = window.location.hash || '#/'
+      window.sessionStorage.setItem('bounty:returnTo', current)
+    } catch (_) {
+      // ignore
+    }
+  }
+
   function openCart(e) {
     e?.preventDefault()
     onOpenCart?.()
@@ -34,7 +43,6 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0 }) {
           <nav className="hidden md:flex items-center gap-5">
             {/* Desktop-only links */}
             <a className="relative" href="#best-sellers">Shop</a>
-            <a className="relative" href="#/admin">Admin</a>
           </nav>
         </div>
 
@@ -44,7 +52,7 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0 }) {
         {/* Right actions */}
         <div className="nav-right justify-self-end col-start-3 flex items-center justify-end gap-3 md:gap-5">
           <a className="relative hidden md:inline" href="#search" onClick={openSearch} aria-label="Open search">Search</a>
-          <a className="relative hidden md:inline" href="#/signin">Login</a>
+          <a className="relative hidden md:inline" href="#/signin" onClick={rememberReturnTo}>Login</a>
           <button className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100" onClick={openSearch} aria-label="Open search">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <circle cx="11" cy="11" r="8" />
@@ -81,7 +89,7 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0 }) {
         </div>
         <nav className="flex flex-col text-base divide-y divide-gray-100">
           <button className="text-left px-3 py-4 hover:bg-gray-50 rounded-lg" onClick={openSearch}>Search</button>
-          <a className="px-3 py-4 hover:bg-gray-50 rounded-lg" href="#/signin" onClick={() => setMobileOpen(false)}>Login</a>
+          <a className="px-3 py-4 hover:bg-gray-50 rounded-lg" href="#/signin" onClick={() => { rememberReturnTo(); setMobileOpen(false) }}>Login</a>
           <button className="text-left px-3 py-4 hover:bg-gray-50 rounded-lg" onClick={openCart}>Open cart</button>
         </nav>
       </aside>

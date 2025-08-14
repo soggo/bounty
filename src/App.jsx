@@ -20,6 +20,24 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
+  // Persist cart to localStorage so it survives auth redirects/refreshes
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('bounty:cart')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) setCartItems(parsed)
+      }
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('bounty:cart', JSON.stringify(cartItems))
+    } catch (_) {}
+  }, [cartItems])
+
   function getPrimaryImageUrl(product) {
     const images = Array.isArray(product?.images) ? product.images : []
     const first = images.find(img => img && (img.url || typeof img === 'string'))
