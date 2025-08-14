@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Storefront from './pages/Storefront.jsx'
 import Admin from './pages/Admin.jsx'
 import ProductDetail from './pages/ProductDetail.jsx'
+import SignIn from './pages/SignIn.jsx'
+import SignUp from './pages/SignUp.jsx'
 import CartDrawer from './components/CartDrawer.jsx'
 import heroPlaceholder from '../january_w1-homepage_desktop_.jpeg'
 
@@ -57,6 +59,8 @@ export default function App() {
   function remove(id) { setCartItems((prev) => prev.filter((i) => i.id !== id)) }
 
   if (route.startsWith('#/admin')) return <Admin />
+  if (route.startsWith('#/signin')) return <SignIn />
+  if (route.startsWith('#/signup')) return <SignUp />
   if (route.startsWith('#/p/')) {
     const slug = decodeURIComponent(route.replace(/^#\/p\//, '').split(/[?#]/)[0] || '')
     return (
