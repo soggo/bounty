@@ -56,6 +56,7 @@ export default function Storefront({
   onOpenCart,
   onCloseCart,
   cartCount = 0,
+  isAuthenticated = false,
 }) {
   const [isSearchOpen, setSearchOpen] = useState(false)
   const [products, setProducts] = useState([])
@@ -101,7 +102,7 @@ export default function Storefront({
   }, [products])
   return (
     <div className="page">
-      <Header onOpenCart={onOpenCart} onOpenSearch={() => setSearchOpen(true)} cartCount={cartCount} />
+      <Header onOpenCart={onOpenCart} onOpenSearch={() => setSearchOpen(true)} cartCount={cartCount} isAuthenticated={isAuthenticated} />
       <Hero onShop={() => setSearchOpen(true)} />
 
       <Section title="Best Sellers" id="best-sellers" titleClassName="text-[clamp(48px,9vw,120px)]">

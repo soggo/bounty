@@ -404,3 +404,41 @@ CREATE POLICY order_items_delete_admin_only
 - Use `first_name` as the display name in UI; no separate display or avatar fields.
 - Orders snapshot pricing and product names/slugs at purchase time to preserve history.
 - For production, consider handling order creation and status updates via Edge Functions using the service role (bypasses RLS as needed).
+
+### user_wishlist_items (optional wishlist)
+
+```sql
+CREATE TABLE IF NOT EXISTS user_wishlist_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (user_id, product_id)
+);
+
+ALTER TABLE user_wishlist_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_wishlist_select_own_or_admin
+  ON user_wishlist_items FOR SELECT
+  USING (
+    user_id = auth.uid() OR EXISTS (
+      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
+    )
+  );
+
+CREATE POLICY user_wishlist_insert_own_or_admin
+  ON user_wishlist_items FOR INSERT
+  WITH CHECK (
+    user_id = auth.uid() OR EXISTS (
+      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
+    )
+  );
+
+CREATE POLICY user_wishlist_delete_own_or_admin
+  ON user_wishlist_items FOR DELETE
+  USING (
+    user_id = auth.uid() OR EXISTS (
+      SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'admin'
+    )
+  );
+```

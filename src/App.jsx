@@ -4,6 +4,7 @@ import Admin from './pages/Admin.jsx'
 import ProductDetail from './pages/ProductDetail.jsx'
 import SignIn from './pages/SignIn.jsx'
 import SignUp from './pages/SignUp.jsx'
+import Account from './pages/Account.jsx'
 import CartDrawer from './components/CartDrawer.jsx'
 import heroPlaceholder from '../january_w1-homepage_desktop_.jpeg'
 
@@ -11,6 +12,7 @@ export default function App() {
   const [route, setRoute] = useState(window.location.hash || '#/')
   const [cartItems, setCartItems] = useState([])
   const [isCartOpen, setCartOpen] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
     function handleHashChange() {
@@ -19,6 +21,22 @@ export default function App() {
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
+
+  useEffect(() => {
+    let mounted = true
+    async function checkAuth() {
+      try {
+        const { data } = await import('./lib/supabaseClient.js').then(m => m)
+        const supabase = data?.supabase || (await import('./lib/supabaseClient.js')).supabase
+        const { data: auth } = await supabase.auth.getSession()
+        if (!mounted) return
+        setIsAuthenticated(!!auth?.session)
+      } catch {
+        setIsAuthenticated(false)
+      }
+    }
+    checkAuth()
+  }, [route])
 
   // Persist cart to localStorage so it survives auth redirects/refreshes
   useEffect(() => {
@@ -79,6 +97,7 @@ export default function App() {
   if (route.startsWith('#/admin')) return <Admin />
   if (route.startsWith('#/signin')) return <SignIn />
   if (route.startsWith('#/signup')) return <SignUp />
+  if (route.startsWith('#/account')) return <Account />
   if (route.startsWith('#/p/')) {
     const slug = decodeURIComponent(route.replace(/^#\/p\//, '').split(/[?#]/)[0] || '')
     return (
@@ -114,6 +133,7 @@ export default function App() {
         onOpenCart={() => setCartOpen(true)}
         onCloseCart={() => setCartOpen(false)}
         cartCount={cartCount}
+        isAuthenticated={isAuthenticated}
       />
       <CartDrawer
         open={isCartOpen}
