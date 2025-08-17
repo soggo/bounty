@@ -61,8 +61,65 @@ CREATE INDEX IF NOT EXISTS idx_products_is_sale ON products(is_sale);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 ```
 
+## Row Level Security (RLS) Policies for Products
+
+**CRITICAL SECURITY**: Enable RLS on products tables to prevent unauthorized access:
+
+```sql
+-- Enable RLS on products table
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+
+-- Enable RLS on product_categories table  
+ALTER TABLE product_categories ENABLE ROW LEVEL SECURITY;
+
+-- Products table policies
+-- Everyone can read products (public storefront)
+CREATE POLICY products_select_public
+  ON products FOR SELECT
+  USING (true);
+
+-- Only admins can insert products
+CREATE POLICY products_insert_admin_only
+  ON products FOR INSERT
+  WITH CHECK (public.is_admin(auth.uid()));
+
+-- Only admins can update products
+CREATE POLICY products_update_admin_only
+  ON products FOR UPDATE
+  USING (public.is_admin(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()));
+
+-- Only admins can delete products
+CREATE POLICY products_delete_admin_only
+  ON products FOR DELETE
+  USING (public.is_admin(auth.uid()));
+
+-- Product categories table policies
+-- Everyone can read categories (public storefront)
+CREATE POLICY product_categories_select_public
+  ON product_categories FOR SELECT
+  USING (true);
+
+-- Only admins can insert categories
+CREATE POLICY product_categories_insert_admin_only
+  ON product_categories FOR INSERT
+  WITH CHECK (public.is_admin(auth.uid()));
+
+-- Only admins can update categories
+CREATE POLICY product_categories_update_admin_only
+  ON product_categories FOR UPDATE
+  USING (public.is_admin(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()));
+
+-- Only admins can delete categories
+CREATE POLICY product_categories_delete_admin_only
+  ON product_categories FOR DELETE
+  USING (public.is_admin(auth.uid()));
+```
+
 ## Notes for Supabase
 - Run the `product_categories` table first, then `products`.
+- **IMPORTANT**: Run the RLS policies above immediately after creating the tables.
 - If `gen_random_uuid()` is unavailable, enable the `pgcrypto` extension or use `uuid_generate_v4()` with the `uuid-ossp` extension.
 
 ---

@@ -4,7 +4,10 @@ import ImageUploader from '../components/ImageUploader.jsx'
 
 export default function Admin() {
   const [statusMessage, setStatusMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [activeTab, setActiveTab] = useState('overview') // 'overview' | 'createCategory' | 'createProduct'
+  const [isAuthorized, setIsAuthorized] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   const [categories, setCategories] = useState([])
   const [loadingCategories, setLoadingCategories] = useState(false)
@@ -28,9 +31,49 @@ export default function Admin() {
     images: []
   })
 
+  // Security check - verify admin access on component mount
   useEffect(() => {
-    refreshCategories()
-    refreshProductStats()
+    async function verifyAdminAccess() {
+      setIsLoading(true)
+      try {
+        const { data: auth } = await supabase.auth.getUser()
+        const user = auth?.user
+        
+        if (!user) {
+          setStatusMessage('Authentication required')
+          setIsAuthorized(false)
+          setIsLoading(false)
+          return
+        }
+        
+        // Check if user has admin role
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+          
+        if (error || profile?.role !== 'admin') {
+          setStatusMessage('Admin access required')
+          setIsAuthorized(false)
+          setIsLoading(false)
+          return
+        }
+        
+        setIsAuthorized(true)
+        setIsLoading(false)
+        
+        // Only load admin data if authorized
+        refreshCategories()
+        refreshProductStats()
+      } catch (error) {
+        setStatusMessage(`Access verification failed: ${error.message}`)
+        setIsAuthorized(false)
+        setIsLoading(false)
+      }
+    }
+    
+    verifyAdminAccess()
   }, [])
 
   async function refreshCategories() {
@@ -130,6 +173,7 @@ export default function Admin() {
   async function handleCreateProduct(e) {
     e.preventDefault()
     setStatusMessage('Creating product...')
+    setSuccessMessage('') // Clear any existing success message
 
     const priceCents = centsFromInput(productForm.price)
     const oldPriceCents = centsFromInput(productForm.old_price)
@@ -202,17 +246,21 @@ export default function Admin() {
       setStatusMessage(`Create product failed: ${details}`)
       return
     }
-    if (result.removed && result.removed.length) {
-      setStatusMessage(`Product created (ignored fields: ${result.removed.join(', ')})`)
-    } else {
-      setStatusMessage('Product created')
-    }
-    refreshProductStats()
+    // Show success message
+    setSuccessMessage('Product created successfully! ')
+    setStatusMessage('')
+    
+    // Clear form
     setProductForm({
       name: '', subtitle: '', description: '', price: '', old_price: '', is_sale: false,
       is_bestseller: false, is_new: false, category_id: '', product_type: 'individual', stock_quantity: 0,
       tags: '', images: []
     })
+    
+    refreshProductStats()
+    
+    // Auto-hide success message after 5 seconds
+    setTimeout(() => setSuccessMessage(''), 2000)
   }
 
   async function startEditProduct(id) {
@@ -317,6 +365,37 @@ export default function Admin() {
     })
   }
 
+  // Show loading state while verifying access
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto mb-4"></div>
+          <p className="text-gray-600">Verifying admin access...</p>
+        </div>
+      </div>
+    )
+  }
+  
+  // Show access denied if not authorized
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-lg border p-6 text-center">
+          <div className="text-red-600 text-4xl mb-4">🚫</div>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-gray-600 mb-4">{statusMessage}</p>
+          <a 
+            href="#/" 
+            className="inline-flex items-center px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition-colors"
+          >
+            Return to Store
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container max-w-[1200px] mx-auto p-6">
@@ -327,32 +406,51 @@ export default function Admin() {
           </div>
           <div className="flex items-center gap-3">
             <a className="text-sm underline" href="#/">Back to Storefront</a>
-            <button className="text-sm px-3 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black" onClick={testConnection}>Test Connection</button>
+            {/* <button className="text-sm px-3 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black" onClick={testConnection}>Test Connection</button> */}
           </div>
         </div>
 
         {statusMessage ? (
           <div className="mb-6 text-sm text-gray-700">{statusMessage}</div>
         ) : null}
+        
+        {successMessage ? (
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 text-green-800">
+            <div className="flex-shrink-0">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="flex-1">{successMessage}</div>
+            <button 
+              onClick={() => setSuccessMessage('')}
+              className="flex-shrink-0 text-green-600 hover:text-green-800 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ) : null}
 
         <div className="mb-6 border-b">
           <nav className="flex gap-4 -mb-px">
             <button
               className={`px-3 py-2 text-sm border-b-2 transition-colors duration-200 ${activeTab === 'overview' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black hover:border-black/50'}`}
-              onClick={() => setActiveTab('overview')}
+              onClick={() => { setActiveTab('overview'); setSuccessMessage(''); }}
             >Overview</button>
             <button
               className={`px-3 py-2 text-sm border-b-2 transition-colors duration-200 ${activeTab === 'createCategory' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black hover:border-black/50'}`}
-              onClick={() => setActiveTab('createCategory')}
+              onClick={() => { setActiveTab('createCategory'); setSuccessMessage(''); }}
             >Create Category</button>
             <button
               className={`px-3 py-2 text-sm border-b-2 transition-colors duration-200 ${activeTab === 'createProduct' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black hover:border-black/50'}`}
-              onClick={() => setActiveTab('createProduct')}
+              onClick={() => { setActiveTab('createProduct'); setSuccessMessage(''); }}
             >Create Product</button>
             {activeTab === 'editProduct' ? (
               <button
                 className={`px-3 py-2 text-sm border-b-2 transition-colors duration-200 ${activeTab === 'editProduct' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black hover:border-black/50'}`}
-                onClick={() => setActiveTab('editProduct')}
+                onClick={() => { setActiveTab('editProduct'); setSuccessMessage(''); }}
               >Edit Product</button>
             ) : null}
           </nav>
@@ -461,7 +559,7 @@ export default function Admin() {
               </div>
               <div>
                 <label className="block text-sm mb-1">Product type</label>
-                <select className="w-full border rounded px-3 py-2" value={productForm.product_type} onChange={(e) => updateProductField('product_type', e.target.value)}>
+                <select className="w-full border rounded px-3 py-2" value={productForm.product_type} onChange={(e) => updateProductField('product_type', e.target.value)} required>
                   <option value="individual">Individual</option>
                   <option value="bundle">Bundle</option>
                   <option value="kit">Kit</option>
@@ -470,12 +568,12 @@ export default function Admin() {
 
               <div>
                 <label className="block text-sm mb-1">Subtitle</label>
-                <input className="w-full border rounded px-3 py-2" value={productForm.subtitle} onChange={(e) => updateProductField('subtitle', e.target.value)} />
+                <input className="w-full border rounded px-3 py-2" value={productForm.subtitle} onChange={(e) => updateProductField('subtitle', e.target.value)} required />
               </div>
               <div>
                 <label className="block text-sm mb-1">Category</label>
-                <select className="w-full border rounded px-3 py-2" value={productForm.category_id} onChange={(e) => updateProductField('category_id', e.target.value)}>
-                  <option value="">None</option>
+                <select className="w-full border rounded px-3 py-2" value={productForm.category_id} onChange={(e) => updateProductField('category_id', e.target.value)} required>
+                  <option value="">Select a category</option>
                   {categories.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -487,17 +585,39 @@ export default function Admin() {
                 <input className="w-full border rounded px-3 py-2" inputMode="decimal" value={productForm.price} onChange={(e) => updateProductField('price', e.target.value)} required />
               </div>
               <div>
-                <label className="block text-sm mb-1">Old price (former price)</label>
-                <input className="w-full border rounded px-3 py-2" inputMode="decimal" value={productForm.old_price} onChange={(e) => updateProductField('old_price', e.target.value)} />
+                <label className="block text-sm mb-1">Old price</label>
+                <input 
+                  className={`w-full border rounded px-3 py-2 ${!productForm.is_sale ? 'bg-gray-100 text-gray-400' : ''}`} 
+                  inputMode="decimal" 
+                  value={productForm.old_price} 
+                  onChange={(e) => updateProductField('old_price', e.target.value)} 
+                  disabled={!productForm.is_sale}
+                />
+              </div>
+
+              {/* Move checkboxes right below price fields */}
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={productForm.is_sale} onChange={(e) => updateProductField('is_sale', e.target.checked)} />
+                  <span>On sale</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={productForm.is_bestseller} onChange={(e) => updateProductField('is_bestseller', e.target.checked)} />
+                  <span>Bestseller</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={productForm.is_new} onChange={(e) => updateProductField('is_new', e.target.checked)} />
+                  <span>New</span>
+                </label>
               </div>
 
               <div>
                 <label className="block text-sm mb-1">Stock quantity</label>
-                <input className="w-full border rounded px-3 py-2" type="number" value={productForm.stock_quantity} onChange={(e) => updateProductField('stock_quantity', e.target.value)} />
+                <input className="w-full border rounded px-3 py-2" type="number" value={productForm.stock_quantity} onChange={(e) => updateProductField('stock_quantity', e.target.value)} required min="0" />
               </div>
               <div>
                 <label className="block text-sm mb-1">Tags (comma separated)</label>
-                <input className="w-full border rounded px-3 py-2" value={productForm.tags} onChange={(e) => updateProductField('tags', e.target.value)} />
+                <input className="w-full border rounded px-3 py-2" value={productForm.tags} onChange={(e) => updateProductField('tags', e.target.value)} required />
               </div>
 
               <div className="md:col-span-2">
@@ -512,22 +632,7 @@ export default function Admin() {
 
               <div className="md:col-span-2">
                 <label className="block text-sm mb-1">Description</label>
-                <textarea className="w-full border rounded px-3 py-2" rows="4" value={productForm.description} onChange={(e) => updateProductField('description', e.target.value)} />
-              </div>
-
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={productForm.is_sale} onChange={(e) => updateProductField('is_sale', e.target.checked)} />
-                  <span>On sale</span>
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={productForm.is_bestseller} onChange={(e) => updateProductField('is_bestseller', e.target.checked)} />
-                  <span>Bestseller</span>
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={productForm.is_new} onChange={(e) => updateProductField('is_new', e.target.checked)} />
-                  <span>New</span>
-                </label>
+                <textarea className="w-full border rounded px-3 py-2" rows="4" value={productForm.description} onChange={(e) => updateProductField('description', e.target.value)} required />
               </div>
 
               {/** Meta fields removed per request */}
