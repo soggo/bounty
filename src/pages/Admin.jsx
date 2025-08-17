@@ -51,7 +51,9 @@ export default function Admin() {
       setStatusMessage(`Failed to load categories: ${error.message}`)
       return
     }
-    setCategories(data || [])
+    const categoriesData = data || []
+    setCategories(categoriesData)
+    setRecentCategories(categoriesData.slice(0, 8)) // Get recent 8 categories for overview
   }
 
   const [productStats, setProductStats] = useState({ total: 0, sale: 0, bestseller: 0, isNew: 0 })
@@ -60,6 +62,16 @@ export default function Admin() {
   const [editingProductId, setEditingProductId] = useState(null)
   const [deletingProductId, setDeletingProductId] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  
+  // Category management state
+  const [recentCategories, setRecentCategories] = useState([])
+  const [allCategories, setAllCategories] = useState([])
+  const [filteredCategories, setFilteredCategories] = useState([])
+  const [showAllCategories, setShowAllCategories] = useState(false)
+  const [editingCategoryId, setEditingCategoryId] = useState(null)
+  const [deletingCategoryId, setDeletingCategoryId] = useState(null)
+  const [showCategoryDeleteConfirm, setShowCategoryDeleteConfirm] = useState(false)
+  const [categorySearchQuery, setCategorySearchQuery] = useState('')
 
   // Enhanced product list state
   const [allProducts, setAllProducts] = useState([])
@@ -439,7 +451,8 @@ export default function Admin() {
       return
     }
 
-    setStatusMessage('Product updated')
+    setSuccessMessage('Product updated successfully!')
+    setStatusMessage('')
     setEditingProductId(null)
     setActiveTab('overview')
     refreshProductStats()
@@ -454,6 +467,9 @@ export default function Admin() {
       is_bestseller: false, is_new: false, category_id: '', product_type: 'individual', stock_quantity: 0,
       tags: '', images: []
     })
+    
+    // Auto-hide success message after 3 seconds
+    setTimeout(() => setSuccessMessage(''), 3000)
   }
 
   function confirmDeleteProduct(productId, productName) {
@@ -499,6 +515,156 @@ export default function Admin() {
   function cancelDeleteProduct() {
     setShowDeleteConfirm(false)
     setDeletingProductId(null)
+    setStatusMessage('')
+  }
+
+  // Category management functions
+  async function loadAllCategories() {
+    setLoadingCategories(true)
+    setStatusMessage('')
+    
+    const { data: categories, error } = await supabase
+      .from('product_categories')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    setLoadingCategories(false)
+    
+    if (error) {
+      setStatusMessage(`Failed to load categories: ${error.message}`)
+      return
+    }
+
+    setAllCategories(categories || [])
+    applyCategoryFilters(categories || [], categorySearchQuery)
+  }
+
+  function applyCategoryFilters(categories, query) {
+    let filtered = [...categories]
+
+    // Apply search filter
+    if (query.trim()) {
+      const searchLower = query.toLowerCase().trim()
+      filtered = filtered.filter(category => 
+        category.name?.toLowerCase().includes(searchLower) ||
+        category.slug?.toLowerCase().includes(searchLower) ||
+        category.id?.toLowerCase().includes(searchLower)
+      )
+    }
+
+    setFilteredCategories(filtered)
+  }
+
+  function handleCategorySearch(query) {
+    setCategorySearchQuery(query)
+    applyCategoryFilters(allCategories, query)
+  }
+
+  async function startEditCategory(id) {
+    setStatusMessage('Loading category…')
+    const { data, error } = await supabase
+      .from('product_categories')
+      .select('*')
+      .eq('id', id)
+      .single()
+    if (error) {
+      setStatusMessage(`Failed to load category: ${error.message}`)
+      return
+    }
+    const c = data || {}
+    setCategoryName(c.name || '')
+    setEditingCategoryId(c.id)
+    setActiveTab('editCategory')
+    setStatusMessage('')
+  }
+
+  async function handleUpdateCategory(e) {
+    e.preventDefault()
+    if (!editingCategoryId) {
+      setStatusMessage('Nothing to update')
+      return
+    }
+    setStatusMessage('Updating category…')
+
+    const payload = {
+      name: categoryName.trim(),
+      slug: slugify(categoryName)
+    }
+
+    if (!payload.name) {
+      setStatusMessage('Category name is required')
+      return
+    }
+
+    const { error } = await supabase
+      .from('product_categories')
+      .update(payload)
+      .eq('id', editingCategoryId)
+
+    if (error) {
+      setStatusMessage(`Update failed: ${error.message}`)
+      return
+    }
+
+    setSuccessMessage('Category updated successfully!')
+    setStatusMessage('')
+    setEditingCategoryId(null)
+    setActiveTab('overview')
+    setCategoryName('')
+    refreshCategories()
+    
+    // Refresh all categories if we're showing them
+    if (showAllCategories) {
+      loadAllCategories()
+    }
+    
+    // Auto-hide success message after 3 seconds
+    setTimeout(() => setSuccessMessage(''), 3000)
+  }
+
+  function confirmDeleteCategory(categoryId, categoryName) {
+    setDeletingCategoryId(categoryId)
+    setShowCategoryDeleteConfirm(true)
+    setStatusMessage(`Are you sure you want to delete "${categoryName}"? This action cannot be undone.`)
+  }
+
+  async function handleDeleteCategory() {
+    if (!deletingCategoryId) {
+      setStatusMessage('No category selected for deletion')
+      return
+    }
+
+    setStatusMessage('Deleting category…')
+    setShowCategoryDeleteConfirm(false)
+
+    const { error } = await supabase
+      .from('product_categories')
+      .delete()
+      .eq('id', deletingCategoryId)
+
+    if (error) {
+      setStatusMessage(`Delete failed: ${error.message}`)
+      setDeletingCategoryId(null)
+      return
+    }
+
+    setSuccessMessage('Category deleted successfully!')
+    setStatusMessage('')
+    setDeletingCategoryId(null)
+    refreshCategories()
+    
+    // Refresh all categories if we're showing them
+    if (showAllCategories) {
+      loadAllCategories()
+    }
+    
+    // Auto-hide success message after 3 seconds
+    setTimeout(() => setSuccessMessage(''), 3000)
+  }
+
+  function cancelDeleteCategory() {
+    setShowCategoryDeleteConfirm(false)
+    setDeletingCategoryId(null)
     setStatusMessage('')
   }
 
@@ -559,6 +725,12 @@ export default function Admin() {
                 className={`px-2 sm:px-3 py-2 text-xs sm:text-sm border-b-2 transition-colors duration-200 whitespace-nowrap ${activeTab === 'editProduct' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black hover:border-black/50'}`}
                 onClick={() => { setActiveTab('editProduct'); setSuccessMessage(''); }}
               >Edit Product</button>
+            ) : null}
+            {activeTab === 'editCategory' ? (
+              <button
+                className={`px-2 sm:px-3 py-2 text-xs sm:text-sm border-b-2 transition-colors duration-200 whitespace-nowrap ${activeTab === 'editCategory' ? 'border-black text-black' : 'border-transparent text-gray-500 hover:text-black hover:border-black/50'}`}
+                onClick={() => { setActiveTab('editCategory'); setSuccessMessage(''); }}
+              >Edit Category</button>
             ) : null}
           </nav>
         </div>
@@ -832,6 +1004,148 @@ export default function Admin() {
                 )}
               </div>
             </div>
+
+            <div className="bg-white border rounded">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border-b gap-3">
+                <h2 className="text-base font-medium">
+                  {showAllCategories ? 'All Categories' : 'Recent Categories'}
+                  {showAllCategories && (
+                    <span className="ml-2 text-sm text-gray-500 block sm:inline">
+                      ({filteredCategories.length} of {allCategories.length})
+                    </span>
+                  )}
+                </h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {!showAllCategories ? (
+                    <>
+                      <button 
+                        className="text-xs sm:text-sm px-2 sm:px-3 py-1 rounded border hover:bg-gray-50 whitespace-nowrap"
+                        onClick={() => {
+                          setShowAllCategories(true)
+                          loadAllCategories()
+                        }}
+                      >
+                        View All Categories
+                      </button>
+                      <button className="text-xs sm:text-sm px-2 sm:px-3 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black disabled:opacity-50 whitespace-nowrap" onClick={refreshCategories} disabled={loadingCategories}>
+                        {loadingCategories ? 'Refreshing…' : 'Refresh'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button 
+                        className="text-xs sm:text-sm px-2 sm:px-3 py-1 rounded border hover:bg-gray-50 whitespace-nowrap"
+                        onClick={() => setShowAllCategories(false)}
+                      >
+                        Show Recent Only
+                      </button>
+                      <button className="text-xs sm:text-sm px-2 sm:px-3 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black disabled:opacity-50 whitespace-nowrap" onClick={loadAllCategories} disabled={loadingCategories}>
+                        {loadingCategories ? 'Refreshing…' : 'Refresh'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {showAllCategories && (
+                <div className="p-4 border-b bg-gray-50">
+                  <div className="flex flex-col gap-3 mb-4">
+                    <div className="w-full">
+                      <input
+                        type="text"
+                        placeholder="Search categories by name, slug, or ID..."
+                        className="w-full px-3 py-2 border rounded-md text-sm"
+                        value={categorySearchQuery}
+                        onChange={(e) => handleCategorySearch(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className={showAllCategories ? 'grid grid-cols-1 gap-4 p-4' : 'divide-y'}>
+                {!showAllCategories ? (
+                  // Recent categories view
+                  recentCategories.length === 0 ? (
+                    <div className="p-4 text-sm text-gray-500">No categories yet</div>
+                  ) : recentCategories.map(c => (
+                    <div key={c.id} className="p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium truncate">{c.name}</div>
+                          <div className="text-sm text-gray-600 flex flex-wrap items-center gap-2 mt-1">
+                            <span>Slug: {c.slug}</span>
+                            <span className="text-gray-400 hidden sm:inline">•</span>
+                            <span className="text-xs text-gray-500">
+                              Created: {new Date(c.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="px-3 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black text-xs sm:text-sm"
+                            onClick={() => startEditCategory(c.id)}
+                          >Edit</button>
+                          <button
+                            className="px-3 py-1 rounded border bg-red-600 text-white hover:bg-red-700 transition-colors text-xs sm:text-sm"
+                            onClick={() => confirmDeleteCategory(c.id, c.name)}
+                            disabled={deletingCategoryId === c.id}
+                          >
+                            {deletingCategoryId === c.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  // All categories view
+                  filteredCategories.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      {categorySearchQuery ? 'No categories match your search.' : 'No categories found.'}
+                    </div>
+                  ) : filteredCategories.map(c => (
+                    <div key={c.id} className="border rounded-lg p-3 sm:p-4 hover:bg-gray-50 transition-colors">
+                      <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
+                        <div className="flex-1 min-w-0 w-full">
+                          <div className="flex flex-col gap-3">
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <h3 className="font-medium text-gray-900 truncate text-sm sm:text-base">{c.name}</h3>
+                                <div className="text-sm text-gray-600 mt-1">
+                                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                                    <span className="text-xs sm:text-sm">Slug: {c.slug}</span>
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    Created: {new Date(c.created_at).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                              <button
+                                className="flex-1 sm:flex-none text-xs sm:text-sm px-3 py-2 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black"
+                                onClick={() => startEditCategory(c.id)}
+                              >
+                                Edit Category
+                              </button>
+                              <button
+                                className="flex-1 sm:flex-none text-xs sm:text-sm px-3 py-2 rounded border bg-red-600 text-white hover:bg-red-700 transition-colors"
+                                onClick={() => confirmDeleteCategory(c.id, c.name)}
+                                disabled={deletingCategoryId === c.id}
+                              >
+                                {deletingCategoryId === c.id ? 'Deleting...' : 'Delete'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -969,6 +1283,45 @@ export default function Admin() {
           </form>
         )}
 
+        {activeTab === 'editCategory' && (
+          <form className="bg-white rounded border p-4 sm:p-6 max-w-[720px]" onSubmit={handleUpdateCategory}>
+            <h2 className="text-lg font-medium mb-4">Edit Category</h2>
+            <div className="mb-3">
+              <label className="block text-sm mb-1">Name</label>
+              <input
+                className="w-full border rounded px-3 py-2"
+                placeholder="e.g., Gifts & Souvenirs"
+                value={categoryName}
+                onChange={(e) => setCategoryName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm mb-1">Slug</label>
+              <input className="w-full border rounded px-3 py-2 bg-gray-50" value={categorySlug} readOnly />
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <button className="bg-black text-white px-4 py-2 rounded hover:bg-white hover:text-black hover:outline-1 hover:outline-black order-1" type="submit">Update Category</button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded border hover:bg-gray-50 order-2"
+                onClick={() => {
+                  setEditingCategoryId(null)
+                  setActiveTab('overview')
+                  setCategoryName('')
+                }}
+              >Cancel</button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded border bg-red-600 text-white hover:bg-red-700 transition-colors order-3 sm:ml-auto"
+                onClick={() => confirmDeleteCategory(editingCategoryId, categoryName)}
+              >
+                Delete Category
+              </button>
+            </div>
+          </form>
+        )}
+
         {activeTab === 'editProduct' && (
           <form className="bg-white rounded border p-4 sm:p-6" onSubmit={handleUpdateProduct}>
             <h2 className="text-lg font-medium mb-4">Edit Product</h2>
@@ -980,7 +1333,7 @@ export default function Admin() {
               </div>
               <div>
                 <label className="block text-sm mb-1">Product type</label>
-                <select className="w-full border rounded px-3 py-2" value={productForm.product_type} onChange={(e) => updateProductField('product_type', e.target.value)}>
+                <select className="w-full border rounded px-3 py-2" value={productForm.product_type} onChange={(e) => updateProductField('product_type', e.target.value)} required>
                   <option value="individual">Individual</option>
                   <option value="bundle">Bundle</option>
                   <option value="kit">Kit</option>
@@ -989,12 +1342,12 @@ export default function Admin() {
 
               <div>
                 <label className="block text-sm mb-1">Subtitle</label>
-                <input className="w-full border rounded px-3 py-2" value={productForm.subtitle} onChange={(e) => updateProductField('subtitle', e.target.value)} />
+                <input className="w-full border rounded px-3 py-2" value={productForm.subtitle} onChange={(e) => updateProductField('subtitle', e.target.value)} required />
               </div>
               <div>
                 <label className="block text-sm mb-1">Category</label>
-                <select className="w-full border rounded px-3 py-2" value={productForm.category_id} onChange={(e) => updateProductField('category_id', e.target.value)}>
-                  <option value="">None</option>
+                <select className="w-full border rounded px-3 py-2" value={productForm.category_id} onChange={(e) => updateProductField('category_id', e.target.value)} required>
+                  <option value="">Select a category</option>
                   {categories.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -1006,17 +1359,39 @@ export default function Admin() {
                 <input className="w-full border rounded px-3 py-2" inputMode="decimal" value={productForm.price} onChange={(e) => updateProductField('price', e.target.value)} required />
               </div>
               <div>
-                <label className="block text-sm mb-1">Old price (former price)</label>
-                <input className="w-full border rounded px-3 py-2" inputMode="decimal" value={productForm.old_price} onChange={(e) => updateProductField('old_price', e.target.value)} />
+                <label className="block text-sm mb-1">Old price</label>
+                <input 
+                  className={`w-full border rounded px-3 py-2 ${!productForm.is_sale ? 'bg-gray-100 text-gray-400' : ''}`} 
+                  inputMode="decimal" 
+                  value={productForm.old_price} 
+                  onChange={(e) => updateProductField('old_price', e.target.value)} 
+                  disabled={!productForm.is_sale}
+                />
+              </div>
+
+              {/* Move checkboxes right below price fields */}
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={productForm.is_sale} onChange={(e) => updateProductField('is_sale', e.target.checked)} />
+                  <span>On sale</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={productForm.is_bestseller} onChange={(e) => updateProductField('is_bestseller', e.target.checked)} />
+                  <span>Bestseller</span>
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={productForm.is_new} onChange={(e) => updateProductField('is_new', e.target.checked)} />
+                  <span>New</span>
+                </label>
               </div>
 
               <div>
                 <label className="block text-sm mb-1">Stock quantity</label>
-                <input className="w-full border rounded px-3 py-2" type="number" value={productForm.stock_quantity} onChange={(e) => updateProductField('stock_quantity', e.target.value)} />
+                <input className="w-full border rounded px-3 py-2" type="number" value={productForm.stock_quantity} onChange={(e) => updateProductField('stock_quantity', e.target.value)} required min="0" />
               </div>
               <div>
                 <label className="block text-sm mb-1">Tags (comma separated)</label>
-                <input className="w-full border rounded px-3 py-2" value={productForm.tags} onChange={(e) => updateProductField('tags', e.target.value)} />
+                <input className="w-full border rounded px-3 py-2" value={productForm.tags} onChange={(e) => updateProductField('tags', e.target.value)} required />
               </div>
 
               <div className="md:col-span-2">
@@ -1031,22 +1406,7 @@ export default function Admin() {
 
               <div className="md:col-span-2">
                 <label className="block text-sm mb-1">Description</label>
-                <textarea className="w-full border rounded px-3 py-2" rows="4" value={productForm.description} onChange={(e) => updateProductField('description', e.target.value)} />
-              </div>
-
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={productForm.is_sale} onChange={(e) => updateProductField('is_sale', e.target.checked)} />
-                  <span>On sale</span>
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={productForm.is_bestseller} onChange={(e) => updateProductField('is_bestseller', e.target.checked)} />
-                  <span>Bestseller</span>
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={productForm.is_new} onChange={(e) => updateProductField('is_new', e.target.checked)} />
-                  <span>New</span>
-                </label>
+                <textarea className="w-full border rounded px-3 py-2" rows="4" value={productForm.description} onChange={(e) => updateProductField('description', e.target.value)} required />
               </div>
             </div>
 
@@ -1111,6 +1471,46 @@ export default function Admin() {
                 onClick={handleDeleteProduct}
               >
                 Delete Product
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Category delete confirmation modal */}
+      {showCategoryDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Confirm Delete</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-700">{statusMessage}</p>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 order-2 sm:order-1"
+                onClick={cancelDeleteCategory}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 order-1 sm:order-2"
+                onClick={handleDeleteCategory}
+              >
+                Delete Category
               </button>
             </div>
           </div>

@@ -29,7 +29,7 @@ export default function ProductCard({ product, onAdd, className = '', imageHeigh
     ? 'Sale'
     : null
 
-  const imageHeightClasses = imageHeightClassName || 'h-[420px] md:h-[500px] lg:h-[560px]'
+  const imageHeightClasses = imageHeightClassName || 'h-[280px] sm:h-[320px] md:h-[400px] lg:h-[460px]'
 
   return (
     <a className={`product-card flex flex-col gap-3 ${className}`} href={`#/p/${encodeURIComponent(product?.slug || '')}`}>
@@ -39,9 +39,9 @@ export default function ProductCard({ product, onAdd, className = '', imageHeigh
           <div className="absolute top-4 right-4 text-[10px] uppercase tracking-[.14em] bg-white/90 px-2 py-1 rounded-full z-10">{label}</div>
         ) : null}
         <div className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-        <div className="absolute inset-0 flex items-end justify-center p-4 opacity-0 group-hover:opacity-100 transition">
+        <div className="absolute inset-0 flex items-end justify-center p-3 sm:p-4 opacity-0 group-hover:opacity-100 transition">
           <button
-            className="pointer-events-auto bg-black text-white text-xs px-4 py-2 rounded-full shadow hover:bg-white hover:text-black hover:outline-1 hover:outline-black"
+            className="pointer-events-auto bg-black text-white text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-full shadow hover:bg-white hover:text-black hover:outline-1 hover:outline-black min-w-[100px] sm:min-w-[120px]"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAdd?.(product) }}
           >
             Add to cart

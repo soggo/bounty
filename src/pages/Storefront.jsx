@@ -153,7 +153,7 @@ export default function Storefront({
               product={p}
               onAdd={() => onAddToCart?.(p)}
               className={idx === 2 ? 'col-span-2 sm:col-span-1 lg:col-span-1' : ''}
-              imageHeightClassName={idx === 2 ? 'h-[540px] md:h-[500px] lg:h-[560px]' : ''}
+              imageHeightClassName={idx === 2 ? 'h-[320px] sm:h-[380px] md:h-[460px] lg:h-[520px]' : ''}
             />
           ))}
         </div>
@@ -171,7 +171,7 @@ export default function Storefront({
               product={p}
               onAdd={() => onAddToCart?.(p)}
               className={idx === 2 ? 'col-span-2 sm:col-span-1 lg:col-span-1' : ''}
-              imageHeightClassName={idx === 2 ? 'h-[540px] md:h-[500px] lg:h-[560px]' : ''}
+              imageHeightClassName={idx === 2 ? 'h-[320px] sm:h-[380px] md:h-[460px] lg:h-[520px]' : ''}
             />
           ))}
         </div>
@@ -189,7 +189,7 @@ export default function Storefront({
               product={p}
               onAdd={() => onAddToCart?.(p)}
               className={idx === 2 ? 'col-span-2 sm:col-span-1 lg:col-span-1' : ''}
-              imageHeightClassName={idx === 2 ? 'h-[540px] md:h-[500px] lg:h-[560px]' : ''}
+              imageHeightClassName={idx === 2 ? 'h-[320px] sm:h-[380px] md:h-[460px] lg:h-[520px]' : ''}
             />
           ))}
         </div>
@@ -207,7 +207,7 @@ export default function Storefront({
               product={p}
               onAdd={() => onAddToCart?.(p)}
               className={idx === 2 ? 'col-span-2 sm:col-span-1 lg:col-span-1' : ''}
-              imageHeightClassName={idx === 2 ? 'h-[540px] md:h-[500px] lg:h-[560px]' : ''}
+              imageHeightClassName={idx === 2 ? 'h-[320px] sm:h-[380px] md:h-[460px] lg:h-[520px]' : ''}
             />
           ))}
         </div>
