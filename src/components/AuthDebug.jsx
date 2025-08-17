@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth.jsx'
-import { detectCorruptedAuthState, forceAuthCleanup, recoverFromAuthError } from '../utils/authRecovery.js'
+import { detectCorruptedAuthState, forceAuthCleanup, recoverFromAuthError, nuclearAuthReset } from '../utils/authRecovery.js'
 
 // Development-only auth debugging component
 export default function AuthDebug() {
@@ -106,6 +106,16 @@ export default function AuthDebug() {
           className="bg-purple-600 hover:bg-purple-500 px-2 py-1 rounded text-xs"
         >
           Recover
+        </button>
+        <button
+          onClick={() => {
+            if (confirm('This will clear ALL browser storage and reload the page. Continue?')) {
+              nuclearAuthReset()
+            }
+          }}
+          className="bg-red-800 hover:bg-red-700 px-2 py-1 rounded text-xs"
+        >
+          🚨 NUCLEAR
         </button>
       </div>
 

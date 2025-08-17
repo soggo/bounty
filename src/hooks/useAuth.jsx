@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, createContext, useContext } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { createAuthCircuitBreaker, recoverFromAuthError, isHotReload } from '../utils/authRecovery.js'
+import { createAuthCircuitBreaker, recoverFromAuthError, isHotReload, forceAuthCleanup, detectCorruptedAuthState } from '../utils/authRecovery.js'
 
 // Create Auth Context
 const AuthContext = createContext({
@@ -159,8 +159,19 @@ export function AuthProvider({ children }) {
       console.log('Hot reload detected, performing gentle auth refresh...')
     }
     
-    // Initial auth check
-    refreshAuth()
+    // Check for corrupted auth state before starting
+    const corruption = detectCorruptedAuthState()
+    if (corruption.hasStaleTokens) {
+      console.warn('Detected corrupted auth state on startup, cleaning up...')
+      forceAuthCleanup()
+      // Give a moment for cleanup to complete
+      setTimeout(() => {
+        if (mounted) refreshAuth()
+      }, 100)
+    } else {
+      // Initial auth check
+      refreshAuth()
+    }
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {

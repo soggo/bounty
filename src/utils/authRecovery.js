@@ -58,6 +58,15 @@ export function forceAuthCleanup() {
     // Clear sessionStorage
     try {
       window.sessionStorage.removeItem('bounty:returnTo')
+      // Clear any other session storage that might be auth related
+      const sessionKeys = []
+      for (let i = 0; i < window.sessionStorage.length; i++) {
+        const key = window.sessionStorage.key(i)
+        if (key && (key.includes('supabase') || key.includes('auth'))) {
+          sessionKeys.push(key)
+        }
+      }
+      sessionKeys.forEach(key => window.sessionStorage.removeItem(key))
     } catch (storageError) {
       console.warn('Error clearing session storage:', storageError)
     }
@@ -66,6 +75,29 @@ export function forceAuthCleanup() {
     return true
   } catch (error) {
     console.error('Error during force auth cleanup:', error)
+    return false
+  }
+}
+
+/**
+ * Nuclear option - clears ALL storage and reloads the page
+ */
+export function nuclearAuthReset() {
+  try {
+    console.log('Performing nuclear auth reset...')
+    
+    // Clear all localStorage
+    window.localStorage.clear()
+    
+    // Clear all sessionStorage
+    window.sessionStorage.clear()
+    
+    // Force reload the page to start fresh
+    window.location.reload()
+    
+    return true
+  } catch (error) {
+    console.error('Error during nuclear auth reset:', error)
     return false
   }
 }
