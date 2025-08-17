@@ -138,7 +138,7 @@ export default function Storefront({
   }, [bestSellers, products])
   return (
     <div className="page">
-      <Header onOpenCart={onOpenCart} onOpenSearch={() => setSearchOpen(true)} cartCount={cartCount} isAuthenticated={isAuthenticated} />
+      <Header onOpenCart={onOpenCart} onOpenSearch={() => setSearchOpen(true)} cartCount={cartCount} />
       <Hero onShop={() => setSearchOpen(true)} />
 
       <Section title="Best Sellers" id="best-sellers" titleClassName="text-[clamp(48px,8vw,120px)]">

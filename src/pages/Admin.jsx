@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase, centsFromInput, slugify } from '../lib/supabaseClient'
+import { useAuth } from '../hooks/useAuth.js'
 import ImageUploader from '../components/ImageUploader.jsx'
 
 export default function Admin() {
+  const { isAuthenticated, userRole, isLoading } = useAuth()
   const [statusMessage, setStatusMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [activeTab, setActiveTab] = useState('overview') // 'overview' | 'createCategory' | 'createProduct'
-  const [isAuthorized, setIsAuthorized] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
 
   const [categories, setCategories] = useState([])
   const [loadingCategories, setLoadingCategories] = useState(false)
@@ -31,50 +31,13 @@ export default function Admin() {
     images: []
   })
 
-  // Security check - verify admin access on component mount
+  // Load admin data when component mounts and user is authenticated as admin
   useEffect(() => {
-    async function verifyAdminAccess() {
-      setIsLoading(true)
-      try {
-        const { data: auth } = await supabase.auth.getUser()
-        const user = auth?.user
-        
-        if (!user) {
-          setStatusMessage('Authentication required')
-          setIsAuthorized(false)
-          setIsLoading(false)
-          return
-        }
-        
-        // Check if user has admin role
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
-          
-        if (error || profile?.role !== 'admin') {
-          setStatusMessage('Admin access required')
-          setIsAuthorized(false)
-          setIsLoading(false)
-          return
-        }
-        
-        setIsAuthorized(true)
-        setIsLoading(false)
-        
-        // Only load admin data if authorized
-        refreshCategories()
-        refreshProductStats()
-      } catch (error) {
-        setStatusMessage(`Access verification failed: ${error.message}`)
-        setIsAuthorized(false)
-        setIsLoading(false)
-      }
+    if (isAuthenticated && userRole === 'admin' && !isLoading) {
+      refreshCategories()
+      refreshProductStats()
     }
-    
-    verifyAdminAccess()
-  }, [])
+  }, [isAuthenticated, userRole, isLoading])
 
   async function refreshCategories() {
     setLoadingCategories(true)
@@ -414,29 +377,16 @@ export default function Admin() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto mb-4"></div>
-          <p className="text-gray-600">Verifying admin access...</p>
+          <p className="text-gray-600">Loading admin dashboard...</p>
         </div>
       </div>
     )
   }
   
-  // Show access denied if not authorized
-  if (!isAuthorized) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-white rounded-lg border p-6 text-center">
-          <div className="text-red-600 text-4xl mb-4">🚫</div>
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h1>
-          <p className="text-gray-600 mb-4">{statusMessage}</p>
-          <a 
-            href="#/" 
-            className="inline-flex items-center px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition-colors"
-          >
-            Return to Store
-          </a>
-        </div>
-      </div>
-    )
+  // Redirect if not authenticated or not admin (handled by App.jsx routing, but kept as fallback)
+  if (!isAuthenticated || userRole !== 'admin') {
+    window.location.hash = '#/'
+    return null
   }
 
   return (

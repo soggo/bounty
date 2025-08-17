@@ -7,15 +7,16 @@ import SignUp from './pages/SignUp.jsx'
 import Account from './pages/Account.jsx'
 import CartDrawer from './components/CartDrawer.jsx'
 import Checkout from './pages/Checkout.jsx'
-import { supabase } from './lib/supabaseClient.js'
+import { AuthProvider, useAuth } from './hooks/useAuth.js'
+import AuthDebug from './components/AuthDebug.jsx'
 import heroPlaceholder from '../january_w1-homepage_desktop_.jpeg'
 
-export default function App() {
+// Main App Logic Component that uses auth hook
+function AppContent() {
   const [route, setRoute] = useState(window.location.hash || '#/')
   const [cartItems, setCartItems] = useState([])
   const [isCartOpen, setCartOpen] = useState(false)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [userRole, setUserRole] = useState(null)
+  const { isAuthenticated, userRole } = useAuth()
 
   useEffect(() => {
     function handleHashChange() {
@@ -25,66 +26,12 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
+  // Clear cart when user logs out
   useEffect(() => {
-    let mounted = true
-    async function checkAuth() {
-      try {
-        const { data: auth } = await supabase.auth.getSession()
-        if (!mounted) return
-        
-        const user = auth?.session?.user
-        setIsAuthenticated(!!user)
-        
-        if (user) {
-          // Fetch user role for admin access control
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single()
-          
-          if (mounted) {
-            setUserRole(profile?.role || 'customer')
-          }
-        } else {
-          setUserRole(null)
-        }
-      } catch {
-        setIsAuthenticated(false)
-        setUserRole(null)
-      }
+    if (!isAuthenticated) {
+      setCartItems([])
     }
-    checkAuth()
-    
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return
-      
-      const user = session?.user
-      setIsAuthenticated(!!user)
-      
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
-        
-        setUserRole(profile?.role || 'customer')
-      } else {
-        setUserRole(null)
-        // Clear cart when user logs out
-        if (event === 'SIGNED_OUT') {
-          setCartItems([])
-        }
-      }
-    })
-    
-    return () => {
-      mounted = false
-      subscription?.unsubscribe()
-    }
-  }, [route])
+  }, [isAuthenticated])
 
   // Persist cart to localStorage so it survives auth redirects/refreshes
   useEffect(() => {
@@ -142,7 +89,7 @@ export default function App() {
   function dec(id) { setCartItems((prev) => prev.map((i) => i.id === id ? { ...i, qty: Math.max(1, i.qty - 1) } : i)) }
   function remove(id) { setCartItems((prev) => prev.filter((i) => i.id !== id)) }
 
-  // Admin access control - require authentication and admin role
+  // Admin access control - now handled by the withAdminAuth HOC
   if (route.startsWith('#/admin')) {
     if (!isAuthenticated) {
       // Store the admin route to return to after login
@@ -152,24 +99,9 @@ export default function App() {
     }
     
     if (userRole !== 'admin') {
-      // Redirect non-admin users to home with error message
-      return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-          <div className="max-w-md w-full bg-white rounded-lg border p-6 text-center">
-            <div className="text-red-600 text-4xl mb-4">🚫</div>
-            <h1 className="text-xl font-semibold text-gray-900 mb-2">Access Denied</h1>
-            <p className="text-gray-600 mb-4">
-              You don't have permission to access the admin panel.
-            </p>
-            <a 
-              href="#/" 
-              className="inline-flex items-center px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition-colors"
-            >
-              Return to Store
-            </a>
-          </div>
-        </div>
-      )
+      // Redirect non-admin users to homepage directly
+      window.location.hash = '#/'
+      return null
     }
     
     return <Admin />
@@ -234,6 +166,16 @@ export default function App() {
         onRemove={remove}
         subtotal={subtotal}
       />
+      <AuthDebug />
     </>
+  )
+}
+
+// Main App component wrapped with AuthProvider
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   )
 }

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header.jsx'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../hooks/useAuth.js'
 
 export default function Account() {
-  const [user, setUser] = useState(null)
+  const { user, isAuthenticated, signOut } = useAuth()
   const [profile, setProfile] = useState(null)
   const [addresses, setAddresses] = useState([])
   const [loading, setLoading] = useState(true)
@@ -13,28 +14,35 @@ export default function Account() {
   useEffect(() => {
     let mounted = true
     async function load() {
-      setLoading(true)
-      setError('')
-      const { data: auth } = await supabase.auth.getUser()
-      const currentUser = auth?.user || null
-      if (!mounted) return
-      setUser(currentUser)
-      if (!currentUser) {
+      if (!user) {
         setLoading(false)
         return
       }
-      const [{ data: prof }, { data: addr }] = await Promise.all([
-        supabase.from('profiles').select('first_name,last_name,role,last_seen_at,created_at').eq('id', currentUser.id).single(),
-        supabase.from('user_addresses').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false })
-      ])
-      if (!mounted) return
-      setProfile(prof || null)
-      setAddresses(Array.isArray(addr) ? addr : [])
-      setLoading(false)
+      
+      setLoading(true)
+      setError('')
+      
+      try {
+        const [{ data: prof }, { data: addr }] = await Promise.all([
+          supabase.from('profiles').select('first_name,last_name,role,last_seen_at,created_at').eq('id', user.id).single(),
+          supabase.from('user_addresses').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+        ])
+        if (!mounted) return
+        setProfile(prof || null)
+        setAddresses(Array.isArray(addr) ? addr : [])
+      } catch (error) {
+        if (mounted) {
+          setError(error.message)
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false)
+        }
+      }
     }
     load()
     return () => { mounted = false }
-  }, [])
+  }, [user])
 
   const displayName = useMemo(() => {
     if (profile?.first_name) return profile.first_name
@@ -46,13 +54,7 @@ export default function Account() {
     if (isLoggingOut) return
     setIsLoggingOut(true)
     try {
-      await supabase.auth.signOut()
-      // Clear any stored return-to path
-      try {
-        window.sessionStorage.removeItem('bounty:returnTo')
-      } catch (_) {}
-      // Redirect to home
-      window.location.hash = '#/'
+      await signOut()
     } catch (error) {
       console.error('Logout error:', error)
       setError('Failed to logout. Please try again.')
@@ -173,9 +175,16 @@ export default function Account() {
 
   const [editing, setEditing] = useState(null)
 
+  // Redirect unauthenticated users to signin
+  if (!isAuthenticated) {
+    window.sessionStorage.setItem('bounty:returnTo', '#/account')
+    window.location.hash = '#/signin'
+    return null
+  }
+
   return (
     <div className="page">
-      <Header onOpenCart={() => {}} onOpenSearch={() => {}} cartCount={0} isAuthenticated={!!user} />
+      <Header onOpenCart={() => {}} onOpenSearch={() => {}} cartCount={0} />
       <div className="container max-w-[1000px] mx-auto p-6">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-semibold">Hello, {displayName}</h1>

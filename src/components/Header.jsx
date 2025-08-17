@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../hooks/useAuth.js'
 
-export default function Header({ onOpenCart, onOpenSearch, cartCount = 0, isAuthenticated = false }) {
+export default function Header({ onOpenCart, onOpenSearch, cartCount = 0 }) {
+  const { isAuthenticated, signOut } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [categories, setCategories] = useState([])
   const [productsByCategory, setProductsByCategory] = useState({})
@@ -27,13 +29,7 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0, isAuth
     if (isLoggingOut) return
     setIsLoggingOut(true)
     try {
-      await supabase.auth.signOut()
-      // Clear any stored return-to path
-      try {
-        window.sessionStorage.removeItem('bounty:returnTo')
-      } catch (_) {}
-      // Redirect to home
-      window.location.hash = '#/'
+      await signOut()
       // Close mobile menu if open
       setMobileOpen(false)
     } catch (error) {
