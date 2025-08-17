@@ -8,6 +8,7 @@ export default function Account() {
   const [addresses, setAddresses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -40,6 +41,25 @@ export default function Account() {
     const email = user?.email || ''
     return email.split('@')[0] || 'Account'
   }, [profile, user])
+
+  async function handleLogout() {
+    if (isLoggingOut) return
+    setIsLoggingOut(true)
+    try {
+      await supabase.auth.signOut()
+      // Clear any stored return-to path
+      try {
+        window.sessionStorage.removeItem('bounty:returnTo')
+      } catch (_) {}
+      // Redirect to home
+      window.location.hash = '#/'
+    } catch (error) {
+      console.error('Logout error:', error)
+      setError('Failed to logout. Please try again.')
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
 
   async function handleSaveAddress(upd) {
     if (!user) return
@@ -157,7 +177,18 @@ export default function Account() {
     <div className="page">
       <Header onOpenCart={() => {}} onOpenSearch={() => {}} cartCount={0} isAuthenticated={!!user} />
       <div className="container max-w-[1000px] mx-auto p-6">
-        <h1 className="text-2xl font-semibold">Hello, {displayName}</h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-2xl font-semibold">Hello, {displayName}</h1>
+          {user && (
+            <button 
+              className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+            >
+              {isLoggingOut ? 'Logging out...' : 'Logout'}
+            </button>
+          )}
+        </div>
         <p className="text-sm text-gray-600 mt-1">Manage your info, addresses and wishlist</p>
 
         {error ? <div className="mt-4 text-red-700 text-sm">{error}</div> : null}

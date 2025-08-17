@@ -73,6 +73,10 @@ export default function App() {
         setUserRole(profile?.role || 'customer')
       } else {
         setUserRole(null)
+        // Clear cart when user logs out
+        if (event === 'SIGNED_OUT') {
+          setCartItems([])
+        }
       }
     })
     

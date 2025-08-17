@@ -6,6 +6,7 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0, isAuth
   const [categories, setCategories] = useState([])
   const [productsByCategory, setProductsByCategory] = useState({})
   const [menuLoading, setMenuLoading] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   function openSearch(e) {
     e?.preventDefault()
@@ -19,6 +20,26 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0, isAuth
       window.sessionStorage.setItem('bounty:returnTo', current)
     } catch (_) {
       // ignore
+    }
+  }
+
+  async function handleLogout() {
+    if (isLoggingOut) return
+    setIsLoggingOut(true)
+    try {
+      await supabase.auth.signOut()
+      // Clear any stored return-to path
+      try {
+        window.sessionStorage.removeItem('bounty:returnTo')
+      } catch (_) {}
+      // Redirect to home
+      window.location.hash = '#/'
+      // Close mobile menu if open
+      setMobileOpen(false)
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      setIsLoggingOut(false)
     }
   }
 
@@ -119,7 +140,16 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0, isAuth
         <div className="nav-right justify-self-end col-start-3 flex items-center justify-end gap-3 md:gap-5">
           <a className="relative hidden md:inline" href="#search" onClick={openSearch} aria-label="Open search">Search</a>
           {isAuthenticated ? (
-            <a className="relative hidden md:inline" href="#/account">Account</a>
+            <>
+              <a className="relative hidden md:inline" href="#/account">Account</a>
+              <button 
+                className="relative hidden md:inline text-gray-600 hover:text-gray-900 transition-colors" 
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+              >
+                {isLoggingOut ? 'Logging out...' : 'Logout'}
+              </button>
+            </>
           ) : (
             <a className="relative hidden md:inline" href="#/signin" onClick={rememberReturnTo}>Login</a>
           )}
@@ -160,7 +190,16 @@ export default function Header({ onOpenCart, onOpenSearch, cartCount = 0, isAuth
         <nav className="flex flex-col text-base divide-y divide-gray-100">
           <button className="text-left px-3 py-4 hover:bg-gray-50 rounded-lg" onClick={openSearch}>Search</button>
           {isAuthenticated ? (
-            <a className="px-3 py-4 hover:bg-gray-50 rounded-lg" href="#/account" onClick={() => setMobileOpen(false)}>Account</a>
+            <>
+              <a className="px-3 py-4 hover:bg-gray-50 rounded-lg" href="#/account" onClick={() => setMobileOpen(false)}>Account</a>
+              <button 
+                className="text-left px-3 py-4 hover:bg-gray-50 rounded-lg text-gray-600 hover:text-gray-900 transition-colors" 
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+              >
+                {isLoggingOut ? 'Logging out...' : 'Logout'}
+              </button>
+            </>
           ) : (
             <a className="px-3 py-4 hover:bg-gray-50 rounded-lg" href="#/signin" onClick={() => { rememberReturnTo(); setMobileOpen(false) }}>Login</a>
           )}
