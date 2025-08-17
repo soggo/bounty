@@ -61,6 +61,16 @@ export default function Admin() {
   const [deletingProductId, setDeletingProductId] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
+  // Enhanced product list state
+  const [allProducts, setAllProducts] = useState([])
+  const [filteredProducts, setFilteredProducts] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState('created_at')
+  const [sortOrder, setSortOrder] = useState('desc')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [productsPerPage] = useState(12)
+  const [showAllProducts, setShowAllProducts] = useState(false)
+
   async function refreshProductStats() {
     setLoadingProducts(true)
     setStatusMessage('')
@@ -78,20 +88,125 @@ export default function Admin() {
       setProductStats({ total: totalCount || 0, sale: saleCount || 0, bestseller: bestCount || 0, isNew: newCount || 0 })
     }
 
-    // Recent products
+    // Recent products for overview
     const { data: recent, error: recentErr } = await supabase
       .from('products')
       .select('id,name,price,old_price,is_sale,is_bestseller,is_new,created_at,stock_quantity')
       .order('created_at', { ascending: false })
       .limit(8)
 
-    setLoadingProducts(false)
     if (recentErr) {
       setStatusMessage(`Failed to load recent products: ${recentErr.message}`)
     } else {
       setRecentProducts(recent || [])
     }
+
+    setLoadingProducts(false)
   }
+
+  async function loadAllProducts() {
+    setLoadingProducts(true)
+    setStatusMessage('')
+    
+    // Fetch all products with enhanced data including images
+    const { data: products, error } = await supabase
+      .from('products')
+      .select(`
+        id,
+        name,
+        price,
+        old_price,
+        is_sale,
+        is_bestseller,
+        is_new,
+        created_at,
+        stock_quantity,
+        images,
+        category_id,
+        product_categories(name)
+      `)
+      .order(sortBy, { ascending: sortOrder === 'asc' })
+
+    setLoadingProducts(false)
+    
+    if (error) {
+      setStatusMessage(`Failed to load products: ${error.message}`)
+      return
+    }
+
+    setAllProducts(products || [])
+    applyFiltersAndSort(products || [], searchQuery)
+  }
+
+  function applyFiltersAndSort(products, query) {
+    let filtered = [...products]
+
+    // Apply search filter
+    if (query.trim()) {
+      const searchLower = query.toLowerCase().trim()
+      filtered = filtered.filter(product => 
+        product.name?.toLowerCase().includes(searchLower) ||
+        product.product_categories?.name?.toLowerCase().includes(searchLower) ||
+        product.id?.toLowerCase().includes(searchLower)
+      )
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aVal, bVal
+      
+      switch (sortBy) {
+        case 'name':
+          aVal = a.name?.toLowerCase() || ''
+          bVal = b.name?.toLowerCase() || ''
+          break
+        case 'price':
+          aVal = a.price || 0
+          bVal = b.price || 0
+          break
+        case 'stock_quantity':
+          aVal = a.stock_quantity || 0
+          bVal = b.stock_quantity || 0
+          break
+        case 'created_at':
+        default:
+          aVal = new Date(a.created_at || 0)
+          bVal = new Date(b.created_at || 0)
+          break
+      }
+
+      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
+      return 0
+    })
+
+    setFilteredProducts(filtered)
+    setCurrentPage(1) // Reset to first page when filtering/sorting
+  }
+
+  function handleSearch(query) {
+    setSearchQuery(query)
+    applyFiltersAndSort(allProducts, query)
+  }
+
+  function handleSort(field) {
+    const newOrder = sortBy === field && sortOrder === 'desc' ? 'asc' : 'desc'
+    setSortBy(field)
+    setSortOrder(newOrder)
+    applyFiltersAndSort(allProducts, searchQuery)
+  }
+
+  function getPrimaryImageUrl(product) {
+    const images = Array.isArray(product?.images) ? product.images : []
+    const first = images.find(img => img && (img.url || typeof img === 'string'))
+    if (!first) return null
+    return typeof first === 'string' ? first : (first.url || null)
+  }
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredProducts.length / productsPerPage)
+  const startIndex = (currentPage - 1) * productsPerPage
+  const paginatedProducts = filteredProducts.slice(startIndex, startIndex + productsPerPage)
 
   function formatCents(cents) {
     if (cents === null || cents === undefined) return ''
@@ -224,6 +339,11 @@ export default function Admin() {
     
     refreshProductStats()
     
+    // Refresh all products if we're showing them
+    if (showAllProducts) {
+      loadAllProducts()
+    }
+    
     // Auto-hide success message after 5 seconds
     setTimeout(() => setSuccessMessage(''), 2000)
   }
@@ -323,6 +443,12 @@ export default function Admin() {
     setEditingProductId(null)
     setActiveTab('overview')
     refreshProductStats()
+    
+    // Refresh all products if we're showing them
+    if (showAllProducts) {
+      loadAllProducts()
+    }
+    
     setProductForm({
       name: '', subtitle: '', description: '', price: '', old_price: '', is_sale: false,
       is_bestseller: false, is_new: false, category_id: '', product_type: 'individual', stock_quantity: 0,
@@ -360,6 +486,11 @@ export default function Admin() {
     setStatusMessage('')
     setDeletingProductId(null)
     refreshProductStats()
+    
+    // Refresh all products if we're showing them
+    if (showAllProducts) {
+      loadAllProducts()
+    }
     
     // Auto-hide success message after 3 seconds
     setTimeout(() => setSuccessMessage(''), 3000)
@@ -459,47 +590,235 @@ export default function Admin() {
 
             <div className="bg-white border rounded">
               <div className="flex items-center justify-between p-4 border-b">
-                <h2 className="text-base font-medium">Recent Products</h2>
+                <h2 className="text-base font-medium">
+                  {showAllProducts ? 'All Products' : 'Recent Products'}
+                  {showAllProducts && (
+                    <span className="ml-2 text-sm text-gray-500">
+                      ({filteredProducts.length} of {allProducts.length})
+                    </span>
+                  )}
+                </h2>
                 <div className="flex items-center gap-2">
-                  <button className="text-sm px-3 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black disabled:opacity-50" onClick={refreshProductStats} disabled={loadingProducts}>
-                    {loadingProducts ? 'Refreshing…' : 'Refresh'}
-                  </button>
+                  {!showAllProducts ? (
+                    <>
+                      <button 
+                        className="text-sm px-3 py-1 rounded border hover:bg-gray-50"
+                        onClick={() => {
+                          setShowAllProducts(true)
+                          loadAllProducts()
+                        }}
+                      >
+                        View All Products
+                      </button>
+                      <button className="text-sm px-3 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black disabled:opacity-50" onClick={refreshProductStats} disabled={loadingProducts}>
+                        {loadingProducts ? 'Refreshing…' : 'Refresh'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button 
+                        className="text-sm px-3 py-1 rounded border hover:bg-gray-50"
+                        onClick={() => setShowAllProducts(false)}
+                      >
+                        Show Recent Only
+                      </button>
+                      <button className="text-sm px-3 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black disabled:opacity-50" onClick={loadAllProducts} disabled={loadingProducts}>
+                        {loadingProducts ? 'Refreshing…' : 'Refresh'}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
-              <div className="divide-y">
-                {recentProducts.length === 0 ? (
-                  <div className="p-4 text-sm text-gray-500">No products yet</div>
-                ) : recentProducts.map(p => (
-                  <div key={p.id} className="p-4 flex items-center justify-between">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{p.name}</div>
-                      <div className="text-sm text-gray-600 flex items-center gap-2">
-                        <span>{formatCents(p.price)}</span>
-                        {p.is_sale && p.old_price ? (
-                          <span className="line-through text-gray-400">{formatCents(p.old_price)}</span>
-                        ) : null}
-                        <span className="text-gray-400">•</span>
-                        <span title="Available quantity">Qty: {Number.isFinite(Number(p.stock_quantity)) ? Number(p.stock_quantity) : 0}</span>
-                      </div>
+
+              {showAllProducts && (
+                <div className="p-4 border-b bg-gray-50">
+                  {/* Search and Sort Controls */}
+                  <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        placeholder="Search products by name, category, or ID..."
+                        className="w-full px-3 py-2 border rounded-md text-sm"
+                        value={searchQuery}
+                        onChange={(e) => handleSearch(e.target.value)}
+                      />
                     </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      {p.is_bestseller ? <span className="px-2 py-0.5 rounded-full bg-gray-100">Bestseller</span> : null}
-                      {p.is_new ? <span className="px-2 py-0.5 rounded-full bg-gray-100">New</span> : null}
-                      {p.is_sale ? <span className="px-2 py-0.5 rounded-full bg-gray-100">Sale</span> : null}
-                      <button
-                        className="ml-2 px-2 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black"
-                        onClick={() => startEditProduct(p.id)}
-                      >Edit</button>
-                      <button
-                        className="px-2 py-1 rounded border bg-red-600 text-white hover:bg-red-700 transition-colors"
-                        onClick={() => confirmDeleteProduct(p.id, p.name)}
-                        disabled={deletingProductId === p.id}
+                    <div className="flex gap-2">
+                      <select
+                        className="px-3 py-2 border rounded-md text-sm"
+                        value={sortBy}
+                        onChange={(e) => {
+                          setSortBy(e.target.value)
+                          applyFiltersAndSort(allProducts, searchQuery)
+                        }}
                       >
-                        {deletingProductId === p.id ? 'Deleting...' : 'Delete'}
+                        <option value="created_at">Sort by Date</option>
+                        <option value="name">Sort by Name</option>
+                        <option value="price">Sort by Price</option>
+                        <option value="stock_quantity">Sort by Stock</option>
+                      </select>
+                      <button
+                        className="px-3 py-2 border rounded-md text-sm hover:bg-gray-100"
+                        onClick={() => handleSort(sortBy)}
+                        title={`Sort ${sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
+                      >
+                        {sortOrder === 'asc' ? '↑' : '↓'}
                       </button>
                     </div>
                   </div>
-                ))}
+
+                  {/* Pagination Info */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between text-sm text-gray-600">
+                      <span>
+                        Showing {startIndex + 1}-{Math.min(startIndex + productsPerPage, filteredProducts.length)} of {filteredProducts.length} products
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="px-2 py-1 border rounded disabled:opacity-50"
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage(currentPage - 1)}
+                        >
+                          Previous
+                        </button>
+                        <span>Page {currentPage} of {totalPages}</span>
+                        <button
+                          className="px-2 py-1 border rounded disabled:opacity-50"
+                          disabled={currentPage === totalPages}
+                          onClick={() => setCurrentPage(currentPage + 1)}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className={showAllProducts ? 'grid grid-cols-1 gap-4 p-4' : 'divide-y'}>
+                {!showAllProducts ? (
+                  // Recent products view (original layout)
+                  recentProducts.length === 0 ? (
+                    <div className="p-4 text-sm text-gray-500">No products yet</div>
+                  ) : recentProducts.map(p => (
+                    <div key={p.id} className="p-4 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{p.name}</div>
+                        <div className="text-sm text-gray-600 flex items-center gap-2">
+                          <span>{formatCents(p.price)}</span>
+                          {p.is_sale && p.old_price ? (
+                            <span className="line-through text-gray-400">{formatCents(p.old_price)}</span>
+                          ) : null}
+                          <span className="text-gray-400">•</span>
+                          <span title="Available quantity">Qty: {Number.isFinite(Number(p.stock_quantity)) ? Number(p.stock_quantity) : 0}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        {p.is_bestseller ? <span className="px-2 py-0.5 rounded-full bg-gray-100">Bestseller</span> : null}
+                        {p.is_new ? <span className="px-2 py-0.5 rounded-full bg-gray-100">New</span> : null}
+                        {p.is_sale ? <span className="px-2 py-0.5 rounded-full bg-gray-100">Sale</span> : null}
+                        <button
+                          className="ml-2 px-2 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black"
+                          onClick={() => startEditProduct(p.id)}
+                        >Edit</button>
+                        <button
+                          className="px-2 py-1 rounded border bg-red-600 text-white hover:bg-red-700 transition-colors"
+                          onClick={() => confirmDeleteProduct(p.id, p.name)}
+                          disabled={deletingProductId === p.id}
+                        >
+                          {deletingProductId === p.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  // All products view (enhanced layout with images)
+                  paginatedProducts.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      {searchQuery ? 'No products match your search.' : 'No products found.'}
+                    </div>
+                  ) : paginatedProducts.map(p => {
+                    const imageUrl = getPrimaryImageUrl(p)
+                    return (
+                      <div key={p.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-start gap-4">
+                          {/* Product Image */}
+                          <div className="w-16 h-16 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
+                            {imageUrl ? (
+                              <img
+                                src={imageUrl}
+                                alt={p.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.target.style.display = 'none'
+                                  e.target.nextSibling.style.display = 'flex'
+                                }}
+                              />
+                            ) : null}
+                            <div 
+                              className={`w-full h-full flex items-center justify-center text-gray-400 text-xs ${imageUrl ? 'hidden' : 'flex'}`}
+                            >
+                              No Image
+                            </div>
+                          </div>
+
+                          {/* Product Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h3 className="font-medium text-gray-900 truncate">{p.name}</h3>
+                                <div className="text-sm text-gray-600 mt-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-medium">{formatCents(p.price)}</span>
+                                    {p.is_sale && p.old_price ? (
+                                      <span className="line-through text-gray-400">{formatCents(p.old_price)}</span>
+                                    ) : null}
+                                    <span className="text-gray-400">•</span>
+                                    <span>Stock: {Number.isFinite(Number(p.stock_quantity)) ? Number(p.stock_quantity) : 0}</span>
+                                  </div>
+                                  {p.product_categories?.name && (
+                                    <div className="text-xs text-gray-500">
+                                      Category: {p.product_categories.name}
+                                    </div>
+                                  )}
+                                  <div className="text-xs text-gray-500">
+                                    Created: {new Date(p.created_at).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="flex items-center gap-2 ml-4">
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {p.is_bestseller ? <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-xs">Bestseller</span> : null}
+                                  {p.is_new ? <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs">New</span> : null}
+                                  {p.is_sale ? <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-xs">Sale</span> : null}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2 mt-3">
+                              <button
+                                className="text-xs px-3 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black"
+                                onClick={() => startEditProduct(p.id)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                className="text-xs px-3 py-1 rounded border bg-red-600 text-white hover:bg-red-700 transition-colors"
+                                onClick={() => confirmDeleteProduct(p.id, p.name)}
+                                disabled={deletingProductId === p.id}
+                              >
+                                {deletingProductId === p.id ? 'Deleting...' : 'Delete'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
               </div>
             </div>
           </div>
