@@ -2,14 +2,26 @@
 
 /**
  * Detects if the app is in a corrupted auth state
+ * More conservative approach - only flag as corrupted if we have specific error indicators
  */
-export function detectCorruptedAuthState() {
+export function detectCorruptedAuthState(lastError = null) {
   try {
-    // Check for common signs of corrupted state
-    const localStorage = window.localStorage
-    const sessionStorage = window.sessionStorage
+    // Only consider it corrupted if we have specific error indicators
+    if (!lastError) return { hasStaleTokens: false, authKeys: [] }
     
-    // Look for stale auth tokens or corrupted session data
+    const errorMessage = lastError.message || ''
+    const isCorruptionError = 
+      errorMessage.includes('Invalid') ||
+      errorMessage.includes('expired') ||
+      errorMessage.includes('malformed') ||
+      errorMessage.includes('corrupt')
+    
+    if (!isCorruptionError) {
+      return { hasStaleTokens: false, authKeys: [] }
+    }
+    
+    // Check for auth tokens only if we have corruption indicators
+    const localStorage = window.localStorage
     const authKeys = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
@@ -20,7 +32,8 @@ export function detectCorruptedAuthState() {
     
     return {
       hasStaleTokens: authKeys.length > 0,
-      authKeys
+      authKeys,
+      reason: errorMessage
     }
   } catch (error) {
     console.warn('Error detecting corrupted auth state:', error)

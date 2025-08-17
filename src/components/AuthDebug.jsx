@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth.jsx'
-import { detectCorruptedAuthState, forceAuthCleanup, recoverFromAuthError, nuclearAuthReset } from '../utils/authRecovery.js'
+import AuthManager from '../lib/AuthManager.js'
+import { detectCorruptedAuthState, forceAuthCleanup, nuclearAuthReset } from '../utils/authRecovery.js'
 
 // Development-only auth debugging component
 export default function AuthDebug() {
@@ -22,12 +23,16 @@ export default function AuthDebug() {
     const success = forceAuthCleanup()
     setDebugInfo({ cleanupSuccess: success })
     if (success) {
-      refreshAuth()
+      AuthManager.refreshAuth()
     }
   }
 
-  function handleRecovery() {
-    recoverFromAuthError(new Error('Manual recovery triggered'))
+  function handleManagerReset() {
+    AuthManager.destroy()
+    setDebugInfo({ managerReset: true })
+    setTimeout(() => {
+      window.location.reload()
+    }, 1000)
   }
 
   if (!isVisible) {
@@ -102,10 +107,10 @@ export default function AuthDebug() {
           Force Cleanup
         </button>
         <button
-          onClick={handleRecovery}
+          onClick={handleManagerReset}
           className="bg-purple-600 hover:bg-purple-500 px-2 py-1 rounded text-xs"
         >
-          Recover
+          Reset Manager
         </button>
         <button
           onClick={() => {

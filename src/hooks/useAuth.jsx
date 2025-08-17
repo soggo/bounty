@@ -1,6 +1,5 @@
-import { useEffect, useState, useCallback, createContext, useContext } from 'react'
-import { supabase } from '../lib/supabaseClient'
-import { createAuthCircuitBreaker, recoverFromAuthError, isHotReload, forceAuthCleanup, detectCorruptedAuthState } from '../utils/authRecovery.js'
+import { useEffect, useState, createContext, useContext } from 'react'
+import AuthManager from '../lib/AuthManager.js'
 
 // Create Auth Context
 const AuthContext = createContext({
@@ -16,199 +15,36 @@ const AuthContext = createContext({
 
 // Auth Provider Component
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [userRole, setUserRole] = useState(null)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState(null)
-  
-  // Create circuit breaker for auth operations
-  const circuitBreaker = useCallback(() => createAuthCircuitBreaker(3, 30000), [])
+  const [authState, setAuthState] = useState({
+    user: null,
+    userRole: null,
+    isAuthenticated: false,
+    isLoading: true,
+    error: null
+  })
 
-  // Clear auth error
-  const clearAuthError = useCallback(() => {
-    setError(null)
-  }, [])
-
-  // Refresh auth state - always use getUser() for consistency
-  const refreshAuth = useCallback(async () => {
-    const breaker = circuitBreaker()
-    
-    try {
-      return await breaker.execute(async () => {
-        setIsLoading(true)
-        setError(null)
-        
-        // Always use getUser() instead of getSession() for fresh data
-        const { data: auth, error: authError } = await supabase.auth.getUser()
-        
-        if (authError) {
-          // If we get an auth error, clear everything
-          console.warn('Auth error:', authError.message)
-          setUser(null)
-          setUserRole(null)
-          setIsAuthenticated(false)
-          setError(authError.message)
-          
-          // Clear potentially corrupted session data
-          try {
-            await supabase.auth.signOut({ scope: 'local' })
-          } catch (signOutError) {
-            console.warn('Error during cleanup signout:', signOutError)
-          }
-          
-          // Trigger recovery if this looks like a corruption issue
-          if (authError.message?.includes('Invalid') || authError.message?.includes('expired')) {
-            recoverFromAuthError(authError)
-          }
-          
-          return { user: null, userRole: null, isAuthenticated: false, error: authError.message }
-        }
-
-        const currentUser = auth?.user
-        setUser(currentUser)
-        setIsAuthenticated(!!currentUser)
-
-        if (currentUser) {
-          // Fetch user role with error handling
-          try {
-            const { data: profile, error: profileError } = await supabase
-              .from('profiles')
-              .select('role')
-              .eq('id', currentUser.id)
-              .single()
-
-            if (profileError) {
-              console.warn('Profile fetch error:', profileError.message)
-              // Don't fail completely if profile fetch fails, default to customer
-              setUserRole('customer')
-            } else {
-              setUserRole(profile?.role || 'customer')
-            }
-          } catch (profileError) {
-            console.warn('Profile fetch exception:', profileError)
-            setUserRole('customer')
-          }
-        } else {
-          setUserRole(null)
-        }
-
-        return { 
-          user: currentUser, 
-          userRole: currentUser ? (userRole || 'customer') : null, 
-          isAuthenticated: !!currentUser, 
-          error: null 
-        }
-      })
-    } catch (error) {
-      console.error('Auth refresh error (circuit breaker):', error)
-      setUser(null)
-      setUserRole(null)
-      setIsAuthenticated(false)
-      setError(error.message)
-      return { user: null, userRole: null, isAuthenticated: false, error: error.message }
-    } finally {
-      setIsLoading(false)
-    }
-  }, [userRole, circuitBreaker])
-
-  // Sign out with cleanup
-  const signOut = useCallback(async () => {
-    try {
-      setIsLoading(true)
-      
-      // Clear local state immediately
-      setUser(null)
-      setUserRole(null)
-      setIsAuthenticated(false)
-      setError(null)
-      
-      // Clear session storage
-      try {
-        window.sessionStorage.removeItem('bounty:returnTo')
-      } catch (storageError) {
-        console.warn('Error clearing session storage:', storageError)
-      }
-      
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        console.warn('Signout error:', error)
-      }
-      
-      // Force redirect to home
-      window.location.hash = '#/'
-    } catch (error) {
-      console.error('Signout error:', error)
-      // Even if signout fails, clear local state and redirect
-      setUser(null)
-      setUserRole(null)
-      setIsAuthenticated(false)
-      window.location.hash = '#/'
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  // Initialize auth state on mount
   useEffect(() => {
-    let mounted = true
-    
-    // Check if we're in a hot reload scenario
-    if (isHotReload()) {
-      console.log('Hot reload detected, performing gentle auth refresh...')
-    }
-    
-    // Check for corrupted auth state before starting
-    const corruption = detectCorruptedAuthState()
-    if (corruption.hasStaleTokens) {
-      console.warn('Detected corrupted auth state on startup, cleaning up...')
-      forceAuthCleanup()
-      // Give a moment for cleanup to complete
-      setTimeout(() => {
-        if (mounted) refreshAuth()
-      }, 100)
-    } else {
-      // Initial auth check
-      refreshAuth()
-    }
+    // Initialize AuthManager
+    AuthManager.initialize()
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return
-
-      console.log('Auth state change:', event, !!session?.user)
-      
-      // Handle different auth events
-      if (event === 'SIGNED_OUT') {
-        setUser(null)
-        setUserRole(null)
-        setIsAuthenticated(false)
-        setError(null)
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        // Refresh auth state for these events
-        await refreshAuth()
-      } else if (event === 'USER_UPDATED') {
-        // User data updated, refresh
-        await refreshAuth()
-      }
+    // Subscribe to auth state changes
+    const unsubscribe = AuthManager.subscribe((newState) => {
+      setAuthState(newState)
     })
 
-    return () => {
-      mounted = false
-      subscription?.unsubscribe()
-    }
-  }, [refreshAuth])
+    // Cleanup subscription on unmount
+    return unsubscribe
+  }, [])
 
   const value = {
-    user,
-    userRole,
-    isAuthenticated,
-    isLoading,
-    error,
-    signOut,
-    refreshAuth,
-    clearAuthError
+    user: authState.user,
+    userRole: authState.userRole,
+    isAuthenticated: authState.isAuthenticated,
+    isLoading: authState.isLoading,
+    error: authState.error,
+    signOut: () => AuthManager.signOut(),
+    refreshAuth: () => AuthManager.refreshAuth(),
+    clearAuthError: () => AuthManager.clearAuthError()
   }
 
   return (
