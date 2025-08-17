@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header.jsx'
 import { supabase } from '../lib/supabaseClient'
-import { useAuth } from '../hooks/useAuth.js'
+import { useAuth } from '../hooks/useAuth.jsx'
 
 export default function Account() {
   const { user, isAuthenticated, signOut } = useAuth()

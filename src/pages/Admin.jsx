@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase, centsFromInput, slugify } from '../lib/supabaseClient'
-import { useAuth } from '../hooks/useAuth.js'
+import { useAuth } from '../hooks/useAuth.jsx'
 import ImageUploader from '../components/ImageUploader.jsx'
 
 export default function Admin() {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAuth } from '../hooks/useAuth.js'
+import { useAuth } from '../hooks/useAuth.jsx'
 import { detectCorruptedAuthState, forceAuthCleanup, recoverFromAuthError } from '../utils/authRecovery.js'
 
 // Development-only auth debugging component

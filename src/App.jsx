@@ -7,7 +7,7 @@ import SignUp from './pages/SignUp.jsx'
 import Account from './pages/Account.jsx'
 import CartDrawer from './components/CartDrawer.jsx'
 import Checkout from './pages/Checkout.jsx'
-import { AuthProvider, useAuth } from './hooks/useAuth.js'
+import { AuthProvider, useAuth } from './hooks/useAuth.jsx'
 import AuthDebug from './components/AuthDebug.jsx'
 import heroPlaceholder from '../january_w1-homepage_desktop_.jpeg'
 

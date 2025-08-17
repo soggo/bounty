@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { useAuth } from '../hooks/useAuth.js'
+import { useAuth } from '../hooks/useAuth.jsx'
 
 export default function Header({ onOpenCart, onOpenSearch, cartCount = 0 }) {
   const { isAuthenticated, signOut } = useAuth()
