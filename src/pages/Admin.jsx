@@ -95,6 +95,8 @@ export default function Admin() {
   const [recentProducts, setRecentProducts] = useState([])
   const [loadingProducts, setLoadingProducts] = useState(false)
   const [editingProductId, setEditingProductId] = useState(null)
+  const [deletingProductId, setDeletingProductId] = useState(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   async function refreshProductStats() {
     setLoadingProducts(true)
@@ -365,6 +367,47 @@ export default function Admin() {
     })
   }
 
+  function confirmDeleteProduct(productId, productName) {
+    setDeletingProductId(productId)
+    setShowDeleteConfirm(true)
+    setStatusMessage(`Are you sure you want to delete "${productName}"? This action cannot be undone.`)
+  }
+
+  async function handleDeleteProduct() {
+    if (!deletingProductId) {
+      setStatusMessage('No product selected for deletion')
+      return
+    }
+
+    setStatusMessage('Deleting product…')
+    setShowDeleteConfirm(false)
+
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', deletingProductId)
+
+    if (error) {
+      setStatusMessage(`Delete failed: ${error.message}`)
+      setDeletingProductId(null)
+      return
+    }
+
+    setSuccessMessage('Product deleted successfully!')
+    setStatusMessage('')
+    setDeletingProductId(null)
+    refreshProductStats()
+    
+    // Auto-hide success message after 3 seconds
+    setTimeout(() => setSuccessMessage(''), 3000)
+  }
+
+  function cancelDeleteProduct() {
+    setShowDeleteConfirm(false)
+    setDeletingProductId(null)
+    setStatusMessage('')
+  }
+
   // Show loading state while verifying access
   if (isLoading) {
     return (
@@ -414,24 +457,7 @@ export default function Admin() {
           <div className="mb-6 text-sm text-gray-700">{statusMessage}</div>
         ) : null}
         
-        {successMessage ? (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 text-green-800">
-            <div className="flex-shrink-0">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="flex-1">{successMessage}</div>
-            <button 
-              onClick={() => setSuccessMessage('')}
-              className="flex-shrink-0 text-green-600 hover:text-green-800 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        ) : null}
+
 
         <div className="mb-6 border-b">
           <nav className="flex gap-4 -mb-px">
@@ -514,6 +540,13 @@ export default function Admin() {
                         className="ml-2 px-2 py-1 rounded border bg-black text-white hover:bg-white hover:text-black hover:outline-1 hover:outline-black"
                         onClick={() => startEditProduct(p.id)}
                       >Edit</button>
+                      <button
+                        className="px-2 py-1 rounded border bg-red-600 text-white hover:bg-red-700 transition-colors"
+                        onClick={() => confirmDeleteProduct(p.id, p.name)}
+                        disabled={deletingProductId === p.id}
+                      >
+                        {deletingProductId === p.id ? 'Deleting...' : 'Delete'}
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -752,10 +785,77 @@ export default function Admin() {
                   })
                 }}
               >Cancel</button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded border bg-red-600 text-white hover:bg-red-700 transition-colors ml-auto"
+                onClick={() => confirmDeleteProduct(editingProductId, productForm.name)}
+              >
+                Delete Product
+              </button>
             </div>
           </form>
         )}
       </div>
+      
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Confirm Delete</h3>
+                <p className="text-sm text-gray-500">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-700">{statusMessage}</p>
+            </div>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                onClick={cancelDeleteProduct}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                onClick={handleDeleteProduct}
+              >
+                Delete Product
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Success notification at bottom */}
+      {successMessage ? (
+        <div className="fixed bottom-6 right-6 max-w-sm p-4 bg-green-50 border border-green-200 rounded-lg shadow-lg flex items-center gap-3 text-green-800 z-50">
+          <div className="flex-shrink-0">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="flex-1">{successMessage}</div>
+          <button 
+            onClick={() => setSuccessMessage('')}
+            className="flex-shrink-0 text-green-600 hover:text-green-800 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
