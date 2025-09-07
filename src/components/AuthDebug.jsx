@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth.jsx'
-import AuthManager from '../lib/AuthManager.js'
 import { detectCorruptedAuthState, forceAuthCleanup, nuclearAuthReset } from '../utils/authRecovery.js'
 
 // Development-only auth debugging component
@@ -19,20 +18,10 @@ export default function AuthDebug() {
     setDebugInfo(corruption)
   }
 
-  function handleForceCleanup() {
+  async function handleForceCleanup() {
     const success = forceAuthCleanup()
     setDebugInfo({ cleanupSuccess: success })
-    if (success) {
-      AuthManager.refreshAuth()
-    }
-  }
-
-  function handleManagerReset() {
-    AuthManager.destroy()
-    setDebugInfo({ managerReset: true })
-    setTimeout(() => {
-      window.location.reload()
-    }, 1000)
+    if (success) await refreshAuth()
   }
 
   if (!isVisible) {
@@ -106,12 +95,7 @@ export default function AuthDebug() {
         >
           Force Cleanup
         </button>
-        <button
-          onClick={handleManagerReset}
-          className="bg-purple-600 hover:bg-purple-500 px-2 py-1 rounded text-xs"
-        >
-          Reset Manager
-        </button>
+        {/* Manager reset removed in new auth architecture */}
         <button
           onClick={() => {
             if (confirm('This will clear ALL browser storage and reload the page. Continue?')) {

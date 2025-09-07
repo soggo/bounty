@@ -16,7 +16,7 @@ function AppContent() {
   const [route, setRoute] = useState(window.location.hash || '#/')
   const [cartItems, setCartItems] = useState([])
   const [isCartOpen, setCartOpen] = useState(false)
-  const { isAuthenticated, userRole } = useAuth()
+  const { isAuthenticated, userRole, isLoading } = useAuth()
 
   useEffect(() => {
     function handleHashChange() {
@@ -89,8 +89,19 @@ function AppContent() {
   function dec(id) { setCartItems((prev) => prev.map((i) => i.id === id ? { ...i, qty: Math.max(1, i.qty - 1) } : i)) }
   function remove(id) { setCartItems((prev) => prev.filter((i) => i.id !== id)) }
 
-  // Admin access control - now handled by the withAdminAuth HOC
+  // Admin access control - wait for auth to finish before routing decisions
   if (route.startsWith('#/admin')) {
+    if (isLoading) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto mb-4"></div>
+            <p className="text-gray-600">Verifying access...</p>
+          </div>
+        </div>
+      )
+    }
+
     if (!isAuthenticated) {
       // Store the admin route to return to after login
       window.sessionStorage.setItem('bounty:returnTo', '#/admin')
